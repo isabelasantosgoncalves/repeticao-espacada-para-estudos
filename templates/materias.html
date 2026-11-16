@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block titulo %}Matérias e assuntos{% endblock %}
+{% block conteudo %}
+<div class="cab-pagina">
+  <div>
+    <p class="selo">Cadastro</p>
+    <h1>Matérias e assuntos</h1>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('criar_materia') }}" class="painel linha-form nova-materia">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="text" name="nome" placeholder="Nova matéria (ex.: Matemática)" required maxlength="120" aria-label="Nome da nova matéria">
+  <button class="btn" type="submit">Adicionar matéria</button>
+</form>
+
+{% if not materias %}
+<p class="nada">Nenhuma matéria ainda. Comece pela primeira acima.</p>
+{% endif %}
+
+<div class="materias">
+{% for m in materias %}
+  <section class="painel materia">
+    <div class="materia-cab">
+      <h2>{{ m.nome }} <span class="cont">{{ m.assuntos | length }}</span></h2>
+      <div class="acoes-linha">
+        <details class="editar">
+          <summary class="link-p">Renomear</summary>
+          <form method="post" action="{{ url_for('editar_materia', mid=m.id) }}" class="linha-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="nome" value="{{ m.nome }}" required maxlength="120" aria-label="Novo nome da matéria">
+            <button class="btn btn-p">Salvar</button>
+          </form>
+        </details>
+        <form method="post" action="{{ url_for('excluir_materia', mid=m.id) }}"
+              data-confirmar="Excluir a matéria “{{ m.nome }}” com todos os assuntos e sessões? Isso não pode ser desfeito.">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="link-p perigo">Excluir</button>
+        </form>
+      </div>
+    </div>
+
+    <ul class="lista-assuntos">
+      {% for a in m.assuntos %}
+      <li>
+        <a href="{{ url_for('historico', aid=a.id) }}">{{ a.nome }}</a>
+        <small>{{ a.n_sessoes }} sess{{ 'ão' if a.n_sessoes == 1 else 'ões' }}</small>
+        <div class="acoes-linha">
+          <details class="editar">
+            <summary class="link-p">Editar</summary>
+            <form method="post" action="{{ url_for('editar_assunto', aid=a.id) }}" class="linha-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="text" name="nome" value="{{ a.nome }}" required maxlength="160" aria-label="Nome do assunto">
+              <select name="materia_id" aria-label="Matéria">
+                {% for m2 in materias %}<option value="{{ m2.id }}" {{ 'selected' if m2.id == m.id }}>{{ m2.nome }}</option>{% endfor %}
+              </select>
+              <button class="btn btn-p">Salvar</button>
+            </form>
+          </details>
+          <form method="post" action="{{ url_for('excluir_assunto', aid=a.id) }}"
+                data-confirmar="Excluir o assunto “{{ a.nome }}”{% if a.n_sessoes %} e suas {{ a.n_sessoes }} sessões{% endif %}?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="link-p perigo">Excluir</button>
+          </form>
+        </div>
+      </li>
+      {% else %}
+      <li class="nada">Nenhum assunto nesta matéria.</li>
+      {% endfor %}
+    </ul>
+
+    <form method="post" action="{{ url_for('criar_assunto') }}" class="linha-form novo-assunto">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="materia_id" value="{{ m.id }}">
+      <input type="text" name="nome" placeholder="Novo assunto em {{ m.nome }}" required maxlength="160" aria-label="Nome do novo assunto">
+      <button class="btn btn-sec btn-p" type="submit">Adicionar</button>
+    </form>
+  </section>
+{% endfor %}
+</div>
+{% endblock %}

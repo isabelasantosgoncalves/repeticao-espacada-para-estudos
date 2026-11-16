@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block titulo %}Hoje{% endblock %}
+{% block conteudo %}
+{% set feitos = revisao | selectattr('feito') | list %}
+<div class="cab-pagina">
+  <div>
+    <p class="selo">{{ NOMES_DIAS[hoje_data.weekday()] }}, {{ hoje_data | br }}</p>
+    <h1>Hoje</h1>
+  </div>
+  {% if revisao %}
+  <div class="resumo">
+    <div><b>{{ revisao | length }}</b><span>assuntos</span></div>
+    <div><b>{{ total_questoes }}</b><span>questões</span></div>
+    <div><b>{{ feitos | length }}/{{ revisao | length }}</b><span>feitos</span></div>
+  </div>
+  {% endif %}
+</div>
+
+{% if not tem_assuntos %}
+<div class="vazio painel">
+  <h2>Comece pelas matérias</h2>
+  <p>Cadastre suas matérias e os assuntos de cada uma. Depois é só voltar aqui.</p>
+  <a class="btn" href="{{ url_for('materias') }}">Cadastrar matérias</a>
+</div>
+{% else %}
+
+<!-- 1. Revisão -->
+<section class="bloco" id="revisao">
+  <div class="bloco-cab">
+    <span class="bloco-num">1</span>
+    <div>
+      <h2>Revisão</h2>
+      <p class="sub">
+        {% if tipo == 'grande' %}Dia de revisão grande: tudo que venceu + o que vence até {{ proximo_fixo | br }}, por prioridade.
+        {% elif tipo == 'diaria' %}Revisão mínima: o assunto de ontem + os de menor domínio ({{ cfg.revisao_minima }} assuntos).
+        {% else %}Sem revisão hoje.{% if proximo_fixo %} A próxima revisão grande é {{ NOMES_DIAS[proximo_fixo.weekday()] | lower }}, {{ proximo_fixo | br }}.{% endif %}
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  {% if revisao %}
+  <ul class="lista-rev">
+    {% for item in revisao %}{% set e = item.estado %}
+    <li class="{{ 'feito' if item.feito }}">
+      <div class="lr-nome">
+        <a href="{{ url_for('historico', aid=item.assunto.id) }}">{{ item.assunto.nome }}</a>
+        <small>{{ item.assunto.materia }}</small>
+      </div>
+      <div class="lr-dom">
+        <span class="barra"><i class="{{ e.dominio_efetivo | cor }}" style="width: {{ (e.dominio_efetivo * 100) | round }}%"></i></span>
+        <small>{{ e.dominio_efetivo | pct }} de domínio</small>
+      </div>
+      <div class="lr-info">
+        {% if e.atraso %}<span class="tag tag-atraso" title="Revisão era {{ e.proxima_revisao | br }}">{{ e.atraso }} dia{{ 's' if e.atraso > 1 }} de atraso</span>
+        {% elif e.proxima_revisao == hoje_data %}<span class="tag">vence hoje</span>
+        {% else %}<span class="tag tag-leve">vence {{ e.proxima_revisao | br }}</span>{% endif %}
+      </div>
+      <div class="lr-q">
+        {% if item.feito %}
+          <span class="ok">✓ {% for f in item.feito %}{{ f.acertos }}/{{ f.total }}{{ ', ' if not loop.last }}{% endfor %}</span>
+        {% else %}<b>{{ e.questoes }}</b> questões{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif tipo %}
+  <p class="nada">Nada para revisar hoje. Aproveite para estudar um assunto novo.</p>
+  {% endif %}
+</section>
+
+<!-- 2. Assunto novo -->
+<section class="bloco" id="novo">
+  <div class="bloco-cab">
+    <span class="bloco-num">2</span>
+    <div>
+      <h2>Assunto novo</h2>
+      <p class="sub">Escolha o que vai estudar pela primeira vez hoje. Amanhã ele entra na revisão.</p>
+    </div>
+  </div>
+  {% if escolhidos %}
+  <ul class="chips">
+    {% for item in escolhidos %}
+    <li class="chip {{ 'feito' if item.feito }}">
+      <span>{{ item.assunto.nome }} <small>· {{ item.assunto.materia }}</small></span>
+      {% if item.feito %}<span class="ok">✓</span>{% else %}
+      <form method="post" action="{{ url_for('remover_novo', aid=item.assunto.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="x" title="Remover" aria-label="Remover {{ item.assunto.nome }}">×</button>
+      </form>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if novos_disponiveis %}
+  <form method="post" action="{{ url_for('escolher_novo') }}" class="linha-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <select name="assunto_id" required aria-label="Assunto novo">
+      <option value="">Escolha um assunto ainda não estudado…</option>
+      {% for materia, itens in novos_disponiveis | groupby('materia') %}
+      <optgroup label="{{ materia }}">
+        {% for a in itens %}<option value="{{ a.id }}">{{ a.nome }}</option>{% endfor %}
+      </optgroup>
+      {% endfor %}
+    </select>
+    <button class="btn" type="submit">Vou estudar este</button>
+  </form>
+  {% elif not escolhidos %}
+  <p class="nada">Todos os assuntos já foram estudados. <a href="{{ url_for('materias') }}">Cadastre novos assuntos</a>.</p>
+  {% endif %}
+</section>
+
+<!-- 3. Registrar resultados -->
+<section class="bloco" id="registrar">
+  <div class="bloco-cab">
+    <span class="bloco-num">3</span>
+    <div>
+      <h2>Registrar resultados</h2>
+      <p class="sub">Preencha só o que já fez. A observação é só um lembrete seu e não entra nos cálculos.</p>
+    </div>
+  </div>
+  {% set pendentes_rev = revisao | rejectattr('feito') | list %}
+  {% set pendentes_novos = escolhidos | rejectattr('feito') | list %}
+  {% if pendentes_rev or pendentes_novos %}
+  <form method="post" action="{{ url_for('registrar_hoje') }}" class="form-resultados" data-validar-resultados>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="tabela-res">
+      <div class="tr-cab"><span>Assunto</span><span>Acertos</span><span>Total</span><span>Observação</span></div>
+      {% for item in pendentes_rev + pendentes_novos %}{% set a = item.assunto %}
+      <div class="tr-linha">
+        <input type="hidden" name="assunto_ids" value="{{ a.id }}">
+        <span class="tr-nome">{{ a.nome }}<small>{{ a.materia }}{% if item.estado is defined %} · revisão{% else %} · novo{% endif %}</small></span>
+        <label><span class="so-mobile">Acertos</span><input type="number" name="acertos_{{ a.id }}" min="0" inputmode="numeric" data-acertos></label>
+        <label><span class="so-mobile">Total</span><input type="number" name="total_{{ a.id }}" min="1" inputmode="numeric" data-total
+          value="{{ item.estado.questoes if item.estado is defined else (fixas or '') }}"></label>
+        <label class="tr-obs"><span class="so-mobile">Observação</span><input type="text" name="obs_{{ a.id }}" maxlength="1000" placeholder="opcional"></label>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="mini">Linhas sem acertos preenchidos são ignoradas.</p>
+    <button class="btn btn-g" type="submit">Salvar resultados</button>
+  </form>
+  {% else %}
+  <p class="nada">{% if revisao or escolhidos %}Tudo registrado por hoje. ✓{% else %}Nada para registrar ainda. Você também pode <a href="{{ url_for('nova_sessao') }}">registrar uma sessão avulsa</a>.{% endif %}</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

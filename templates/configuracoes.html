@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% import "_config_campos.html" as campos %}
+{% block titulo %}Configurações{% endblock %}
+{% block main_class %}conteudo medio{% endblock %}
+{% block conteudo %}
+<div class="cab-pagina"><div><p class="selo">Sua conta</p><h1>Configurações</h1></div></div>
+
+<form method="post" class="painel form" id="form-config">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h2>Modo de revisão</h2>
+  {{ campos.modo(cfg) }}
+
+  <div data-secao="dias">
+    <h2>Dia(s) da revisão fixa</h2>
+    {{ campos.dias(cfg) }}
+  </div>
+
+  <div data-secao="minima">
+    <h2>Revisão mínima diária</h2>
+    {{ campos.minima(cfg) }}
+  </div>
+
+  <h2>Questões por assunto</h2>
+  {{ campos.questoes(cfg) }}
+
+  <div class="acoes"><button class="btn btn-g" type="submit">Salvar configurações</button></div>
+</form>
+
+<section class="painel">
+  <h2>Seus dados</h2>
+  <p class="sub">Baixe um arquivo JSON com matérias, assuntos, sessões e configurações. Serve como backup ou para levar seus dados entre a versão local e a online.</p>
+  <a class="btn btn-sec" href="{{ url_for('exportar') }}">Exportar meus dados</a>
+
+  <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" class="form importar">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h3>Importar dados</h3>
+    <input type="file" name="arquivo" accept=".json,application/json" required aria-label="Arquivo JSON">
+    <label class="check"><input type="checkbox" name="confirmar" value="1" required>
+      Entendo que a importação <b>substitui</b> minhas matérias, assuntos e sessões atuais.</label>
+    <button class="btn" type="submit">Importar</button>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}<script>Revisa.config(document.getElementById('form-config'));</script>{% endblock %}

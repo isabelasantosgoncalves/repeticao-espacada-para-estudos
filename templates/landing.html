@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block titulo %}Estude no ritmo certo{% endblock %}
+{% block main_class %}conteudo largo{% endblock %}
+{% block conteudo %}
+<section class="hero">
+  <div class="hero-texto">
+    <p class="selo">Repetição espaçada · gratuito</p>
+    <h1>Revise o que importa, <span class="destaque">no dia certo.</span></h1>
+    <p class="lead">O Revisa acompanha sua % de acerto em cada assunto e monta a revisão do dia:
+      quais assuntos rever, quantas questões fazer e o que já está dominado.</p>
+    <div class="acoes">
+      <a class="btn btn-g" href="{{ url_for('cadastro') }}">Criar conta</a>
+      <a class="btn btn-g btn-sec" href="{{ url_for('entrar') }}">Entrar</a>
+    </div>
+    <p class="mini">Quer só olhar? <a href="{{ url_for('demo') }}">Entrar na conta demo</a> (demo@demo.com / demo123)</p>
+  </div>
+  <div class="hero-card" aria-hidden="true">
+    <div class="card">
+      <div class="card-cab"><strong>Revisão de hoje</strong><span class="tag">3 assuntos · 30 questões</span></div>
+      <div class="linha-exemplo"><span>Crase</span><span class="barra"><i class="vermelho" style="width:42%"></i></span><b>20 q</b></div>
+      <div class="linha-exemplo"><span>Citologia</span><span class="barra"><i class="amarelo" style="width:66%"></i></span><b>6 q</b></div>
+      <div class="linha-exemplo"><span>Porcentagem</span><span class="barra"><i class="verde" style="width:91%"></i></span><b>4 q</b></div>
+    </div>
+  </div>
+</section>
+
+<section class="recursos">
+  <article>
+    <h3>Sabe quando revisar</h3>
+    <p>Errou muito? Volta em 2 dias. Acertou 95%? Só daqui a 30. Acertos seguidos dobram o intervalo.</p>
+  </article>
+  <article>
+    <h3>Conta o esquecimento</h3>
+    <p>Cada semana de atraso tira 5% do seu domínio, e os assuntos atrasados sobem na fila.</p>
+  </article>
+  <article>
+    <h3>Mapa de domínio</h3>
+    <p>Veja em vermelho, amarelo e verde o que precisa de atenção agora, o que pode esperar e o que já está dominado.</p>
+  </article>
+  <article>
+    <h3>Do seu jeito</h3>
+    <p>Revisão grande em dias fixos, revisão mínima diária ou as duas. Exporte seus dados quando quiser.</p>
+  </article>
+</section>
+
+<section class="como">
+  <h2>Como funciona</h2>
+  <ol class="passos">
+    <li><b>Cadastre</b> suas matérias e assuntos.</li>
+    <li><b>Estude</b> um assunto novo e registre acertos e total de questões.</li>
+    <li><b>Abra a tela Hoje</b> todo dia: ela diz o que revisar e quantas questões fazer.</li>
+  </ol>
+</section>
+{% endblock %}

@@ -1,0 +1,46 @@
+{# Campos de configuração usados no onboarding e na tela Configurações #}
+{% macro modo(cfg) %}
+<div class="opcoes" data-grupo="modo">
+  {% for valor, titulo, desc in [
+      ('fixa', 'Só fixa', 'Uma revisão grande nos dias que você escolher.'),
+      ('diaria', 'Só diária', 'Todo dia, uma revisão curta com poucos assuntos.'),
+      ('ambos', 'Fixa + diária', 'Revisão grande no dia fixo e a mínima nos outros dias.')] %}
+  <label class="opcao">
+    <input type="radio" name="modo" value="{{ valor }}" {{ 'checked' if cfg.modo == valor }} required>
+    <span><b>{{ titulo }}</b><small>{{ desc }}</small></span>
+  </label>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro dias(cfg) %}
+<div class="dias" data-campo="dias">
+  {% for nome in NOMES_DIAS %}
+  <label class="dia">
+    <input type="checkbox" name="dias_fixos" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 in cfg.dias_fixos }}>
+    <span>{{ nome[:3] }}</span>
+  </label>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro minima(cfg) %}
+<label class="campo-num">
+  <input type="number" name="revisao_minima" min="1" max="50" value="{{ cfg.revisao_minima }}" required>
+  <span>assuntos por dia</span>
+</label>
+{% endmacro %}
+
+{% macro questoes(cfg) %}
+<div class="opcoes">
+  <label class="opcao">
+    <input type="radio" name="questoes_modo" value="auto" {{ 'checked' if cfg.questoes_modo == 'auto' }}>
+    <span><b>Automático (pela tabela)</b><small>De 4 a 20 questões, conforme sua última % de acerto.</small></span>
+  </label>
+  <label class="opcao">
+    <input type="radio" name="questoes_modo" value="fixo" {{ 'checked' if cfg.questoes_modo == 'fixo' }}>
+    <span><b>Número fixo</b><small>Sempre a mesma quantidade:
+      <input type="number" name="questoes_fixas" min="1" max="500" value="{{ cfg.questoes_fixas }}" class="num-inline"> questões</small></span>
+  </label>
+</div>
+{% endmacro %}

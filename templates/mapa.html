@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block titulo %}Mapa de domínio{% endblock %}
+{% block conteudo %}
+<div class="cab-pagina">
+  <div>
+    <p class="selo">Visão geral</p>
+    <h1>Mapa de domínio</h1>
+  </div>
+  <div class="legenda">
+    <span><i class="ponto vermelho"></i> &lt; 50%</span>
+    <span><i class="ponto amarelo"></i> 50–84%</span>
+    <span><i class="ponto verde"></i> ≥ 85%</span>
+  </div>
+</div>
+
+{% set secoes = [
+  ('agora', 'Revisar agora', 'Revisão vencida ou marcada para hoje.'),
+  ('esperar', 'Pode esperar', 'Revisão no futuro, domínio abaixo de 85%.'),
+  ('dominado', 'Dominado', 'Domínio de 85% ou mais e revisão em dia.')] %}
+
+<div class="mapa-resumo">
+  {% for chave, titulo, _ in secoes %}
+  <a href="#sec-{{ chave }}" class="mr mr-{{ chave }}"><b>{{ contagem[chave] }}</b><span>{{ titulo }}</span></a>
+  {% endfor %}
+</div>
+
+{% for chave, titulo, desc in secoes %}
+<section class="bloco" id="sec-{{ chave }}">
+  <div class="bloco-cab sem-num">
+    <div><h2>{{ titulo }} <span class="cont">{{ contagem[chave] }}</span></h2><p class="sub">{{ desc }}</p></div>
+  </div>
+  {% if grupos[chave] %}
+    {% for materia, itens in grupos[chave] | dictsort %}
+    <h3 class="materia-tit">{{ materia }}</h3>
+    <ul class="lista-mapa">
+      {% for item in itens %}{% set e = item.estado %}
+      <li>
+        <a class="lm-nome" href="{{ url_for('historico', aid=item.assunto.id) }}">{{ item.assunto.nome }}</a>
+        <span class="barra barra-g" title="Domínio {{ e.dominio | pct }}{% if e.dominio_efetivo < e.dominio %}, efetivo {{ e.dominio_efetivo | pct }} pelo atraso{% endif %}">
+          <i class="{{ e.dominio_efetivo | cor }}" style="width: {{ (e.dominio_efetivo * 100) | round }}%"></i>
+        </span>
+        <span class="lm-pct">{{ e.dominio_efetivo | pct }}{% if e.dominio_efetivo < e.dominio %}<small title="Domínio antes do esquecimento"> ({{ e.dominio | pct }})</small>{% endif %}</span>
+        <span class="lm-data {{ 'atrasado' if e.atraso }}">{{ e.proxima_revisao | br }}<small>{{ e.proxima_revisao | relativo }}</small></span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endfor %}
+  {% else %}
+    <p class="nada">Nenhum assunto aqui.</p>
+  {% endif %}
+</section>
+{% endfor %}
+
+{% if nao_estudados %}
+<section class="bloco">
+  <div class="bloco-cab sem-num"><div><h2>Ainda não estudados</h2><p class="sub">Escolha um deles como assunto novo na tela Hoje.</p></div></div>
+  {% for materia, itens in nao_estudados | dictsort %}
+  <h3 class="materia-tit">{{ materia }}</h3>
+  <ul class="chips">{% for a in itens %}<li class="chip">{{ a.nome }}</li>{% endfor %}</ul>
+  {% endfor %}
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,14 @@
+# Banco e segredos
+estudos.db
+*.db-journal
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Sistema
+.DS_Store
+Thumbs.db

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block titulo %}Entrar{% endblock %}
+{% block main_class %}conteudo estreito{% endblock %}
+{% block conteudo %}
+<div class="painel auth">
+  <h1>Entrar</h1>
+  <p class="sub">Bom te ver de novo.</p>
+  <form method="post" class="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>E-mail
+      <input type="email" name="email" value="{{ email or '' }}" required autocomplete="email" autofocus>
+    </label>
+    <label>Senha
+      <input type="password" name="senha" required autocomplete="current-password">
+    </label>
+    <label class="check"><input type="checkbox" name="lembrar" value="1"> Manter conectado</label>
+    <button class="btn btn-g btn-bloco" type="submit">Entrar</button>
+  </form>
+  <p class="rodape-auth">Ainda não tem conta? <a href="{{ url_for('cadastro') }}">Criar conta</a></p>
+  <p class="rodape-auth mini">Ou <a href="{{ url_for('demo') }}">entre na conta demo</a>.</p>
+</div>
+{% endblock %}

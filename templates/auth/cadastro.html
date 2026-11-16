@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block titulo %}Criar conta{% endblock %}
+{% block main_class %}conteudo estreito{% endblock %}
+{% block conteudo %}
+<div class="painel auth">
+  <h1>Criar conta</h1>
+  <p class="sub">Leva menos de um minuto.</p>
+  <form method="post" class="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Nome
+      <input type="text" name="nome" value="{{ nome or '' }}" required maxlength="100" autocomplete="name" autofocus>
+    </label>
+    <label>E-mail
+      <input type="email" name="email" value="{{ email or '' }}" required maxlength="200" autocomplete="email">
+    </label>
+    <label>Senha <small>(mínimo 6 caracteres)</small>
+      <input type="password" name="senha" required minlength="6" autocomplete="new-password">
+    </label>
+    <button class="btn btn-g btn-bloco" type="submit">Criar conta</button>
+  </form>
+  <p class="rodape-auth">Já tem conta? <a href="{{ url_for('entrar') }}">Entrar</a></p>
+</div>
+{% endblock %}
