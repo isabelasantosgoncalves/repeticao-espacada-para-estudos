@@ -3,11 +3,55 @@
 {% block conteudo %}
 <div class="cab-pagina">
   <div>
-    <p class="selo"><a href="{{ url_for('mapa') }}">Mapa</a> · {{ assunto.materia }}</p>
+    <p class="selo"><a href="{{ url_for('mapa') }}">Mapa</a> · {{ assunto.materia }}{% if pai %} · <a href="{{ url_for('historico', aid=pai.id) }}">{{ pai.nome }}</a>{% endif %}</p>
     <h1>{{ assunto.nome }}</h1>
   </div>
+  {% if filhos %}
+  <a class="btn btn-sec" href="{{ url_for('materias') }}#assunto-{{ assunto.id }}">Gerenciar subassuntos</a>
+  {% else %}
   <a class="btn" href="{{ url_for('nova_sessao', assunto=assunto.id) }}">Registrar sessão</a>
+  {% endif %}
 </div>
+
+{% if filhos %}
+<div class="stats stats-grupo">
+  <div class="stat">
+    <span>Domínio do assunto</span>
+    {% if dominio_grupo is not none %}
+    <b class="txt-{{ dominio_grupo | cor }}">{{ dominio_grupo | pct }}</b>
+    <small>média dos subassuntos estudados</small>
+    {% else %}
+    <b>—</b><small>nenhum subassunto estudado ainda</small>
+    {% endif %}
+  </div>
+  <div class="stat">
+    <span>Subassuntos</span>
+    <b>{{ filhos | length }}</b>
+    <small>{{ filhos | selectattr('estado') | list | length }} já estudados</small>
+  </div>
+</div>
+
+<section class="bloco">
+  <div class="bloco-cab sem-num"><div><h2>Subassuntos</h2>
+    <p class="sub">Cada um tem o próprio domínio e a própria data de revisão.</p></div></div>
+  <ul class="lista-mapa">
+    {% for f in filhos %}{% set e = f.estado %}
+    <li>
+      <a class="lm-nome" href="{{ url_for('historico', aid=f.id) }}">{{ f.nome }}</a>
+      {% if e %}
+      <span class="barra barra-g"><i class="{{ e.dominio_efetivo | cor }}" style="width: {{ (e.dominio_efetivo * 100) | round }}%"></i></span>
+      <span class="lm-pct">{{ e.dominio_efetivo | pct }}</span>
+      <span class="lm-data {{ 'atrasado' if e.atraso }}">{{ e.proxima_revisao | br }}<small>{{ e.proxima_revisao | relativo }}</small></span>
+      {% else %}
+      <span class="barra barra-g"></span>
+      <span class="lm-pct">—</span>
+      <span class="lm-data"><a href="{{ url_for('nova_sessao', assunto=f.id) }}">registrar</a><small>ainda não estudado</small></span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 {% if estado %}
 <div class="stats">
@@ -39,8 +83,10 @@
 </section>
 {% endif %}
 
+{% if not filhos or sessoes %}
 <section class="bloco">
-  <div class="bloco-cab sem-num"><div><h2>Sessões <span class="cont">{{ sessoes | length }}</span></h2></div></div>
+  <div class="bloco-cab sem-num"><div><h2>Sessões <span class="cont">{{ sessoes | length }}</span></h2>
+    {% if filhos %}<p class="sub">Registradas antes de criar os subassuntos. Ficam no histórico, mas não entram mais nas revisões.</p>{% endif %}</div></div>
   {% if sessoes %}
   <div class="tabela-wrap">
     <table class="tabela">
@@ -68,6 +114,7 @@
   <p class="nada">Nenhuma sessão ainda. <a href="{{ url_for('nova_sessao', assunto=assunto.id) }}">Registre a primeira</a>.</p>
   {% endif %}
 </section>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 {% if estado %}

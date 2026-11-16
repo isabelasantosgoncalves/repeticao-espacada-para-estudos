@@ -14,14 +14,26 @@
     </div>
     <p class="mini">Quer só olhar? <a href="{{ url_for('demo') }}">Entrar na conta demo</a> (demo@demo.com / demo123)</p>
   </div>
-  <div class="hero-card" aria-hidden="true">
-    <div class="card">
-      <div class="card-cab"><strong>Revisão de hoje</strong><span class="tag">3 assuntos · 30 questões</span></div>
-      <div class="linha-exemplo"><span>Crase</span><span class="barra"><i class="vermelho" style="width:42%"></i></span><b>20 q</b></div>
-      <div class="linha-exemplo"><span>Citologia</span><span class="barra"><i class="amarelo" style="width:66%"></i></span><b>6 q</b></div>
-      <div class="linha-exemplo"><span>Porcentagem</span><span class="barra"><i class="verde" style="width:91%"></i></span><b>4 q</b></div>
-    </div>
-  </div>
+  <figure class="figura">
+      <svg viewBox="0 0 520 300" role="img" aria-labelledby="fig-tit">
+        <title id="fig-tit">Curva do esquecimento: sem revisão a retenção cai a quase zero; com revisões nos dias 2, 6, 13, 28 e 58 ela volta a 100% e cai cada vez mais devagar.</title>
+        <line class="grade-fig" x1="40" x2="500" y1="198" y2="198"/><line class="grade-fig" x1="40" x2="500" y1="145" y2="145"/><line class="grade-fig" x1="40" x2="500" y1="92" y2="92"/><line class="grade-fig" x1="40" x2="500" y1="40" y2="40"/>
+        <line class="eixo" x1="40" x2="500" y1="250" y2="250"/>
+        <line class="eixo" x1="40" x2="40" y1="34" y2="250"/>
+        <text class="rotulo" x="34" y="43" text-anchor="end">100%</text>
+        <text class="rotulo" x="34" y="148" text-anchor="end">50%</text>
+        <text class="rotulo" x="34" y="253" text-anchor="end">0</text>
+        <text class="rotulo" x="40" y="267" text-anchor="middle">0</text>
+        <line class="eixo" x1="55.3" x2="55.3" y1="250" y2="255"/><text class="rotulo" x="55.3" y="267" text-anchor="middle">2</text><line class="eixo" x1="86.0" x2="86.0" y1="250" y2="255"/><text class="rotulo" x="86.0" y="267" text-anchor="middle">6</text><line class="eixo" x1="139.7" x2="139.7" y1="250" y2="255"/><text class="rotulo" x="139.7" y="267" text-anchor="middle">13</text><line class="eixo" x1="254.7" x2="254.7" y1="250" y2="255"/><text class="rotulo" x="254.7" y="267" text-anchor="middle">28</text><line class="eixo" x1="484.7" x2="484.7" y1="250" y2="255"/><text class="rotulo" x="484.7" y="267" text-anchor="middle">58</text>
+        <text class="rotulo" x="500" y="286" text-anchor="end">dias desde o primeiro estudo</text>
+        <path class="curva-sem" d="M40.0,40.0 L43.8,76.7 L47.7,107.1 L51.5,132.1 L55.3,152.7 L59.2,169.7 L63.0,183.8 L66.8,195.3 L70.7,204.9 L74.5,212.8 L78.3,219.3 L82.2,224.7 L86.0,229.1 L89.8,232.8 L93.7,235.8 L97.5,238.3 L101.3,240.3 L105.2,242.0 L109.0,243.4 L112.8,244.6 L116.7,245.5 L120.5,246.3 L124.3,246.9 L128.2,247.5 L132.0,247.9 L135.8,248.3 L139.7,248.6 L143.5,248.8 L147.3,249.0 L151.2,249.2 L155.0,249.3 L158.8,249.5 L162.7,249.6 L166.5,249.6 L170.3,249.7 L174.2,249.7 L178.0,249.8 L181.8,249.8 L185.7,249.9 L189.5,249.9 L193.3,249.9 L197.2,249.9 L201.0,249.9 L204.8,249.9 L208.7,250.0 L212.5,250.0 L216.3,250.0 L220.2,250.0 L224.0,250.0 L227.8,250.0 L500.0,250.0"/>
+        <text class="rotulo" x="109" y="238">sem revisão</text>
+        <path class="curva-rev" pathLength="1000" d="M40.0,40.0 L42.6,65.3 L45.1,87.5 L47.7,107.1 L50.2,124.3 L52.8,139.4 L55.3,152.7 L55.3,40.0 L60.4,63.1 L65.6,83.7 L70.7,102.0 L75.8,118.2 L80.9,132.7 L86.0,145.6 L86.0,40.0 L91.4,51.4 L96.7,62.1 L102.1,72.3 L107.5,81.9 L112.8,91.0 L118.2,99.6 L123.6,107.7 L128.9,115.4 L134.3,122.7 L139.7,129.6 L139.7,40.0 L144.9,45.1 L150.1,50.1 L155.3,55.0 L160.6,59.7 L165.8,64.3 L171.0,68.8 L176.3,73.3 L181.5,77.6 L186.7,81.7 L191.9,85.8 L197.2,89.8 L202.4,93.7 L207.6,97.5 L212.8,101.2 L218.1,104.9 L223.3,108.4 L228.5,111.8 L233.8,115.2 L239.0,118.5 L244.2,121.7 L249.4,124.8 L254.7,127.8 L254.7,40.0 L259.8,42.3 L264.9,44.5 L270.0,46.8 L275.1,49.0 L280.2,51.2 L285.3,53.3 L290.4,55.5 L295.6,57.6 L300.7,59.7 L305.8,61.8 L310.9,63.8 L316.0,65.8 L321.1,67.9 L326.2,69.8 L331.3,71.8 L336.4,73.7 L341.6,75.7 L346.7,77.6 L351.8,79.4 L356.9,81.3 L362.0,83.1 L367.1,84.9 L372.2,86.7 L377.3,88.5 L382.4,90.3 L387.6,92.0 L392.7,93.7 L397.8,95.4 L402.9,97.1 L408.0,98.8 L413.1,100.4 L418.2,102.1 L423.3,103.7 L428.4,105.3 L433.6,106.8 L438.7,108.4 L443.8,109.9 L448.9,111.5 L454.0,113.0 L459.1,114.5 L464.2,115.9 L469.3,117.4 L474.4,118.8 L479.6,120.3 L484.7,121.7 L484.7,40.0 L500.0,43.1"/>
+        <circle class="marca-rev" cx="55.3" cy="152.7" r="4" style="animation-delay:0.70s"/><circle class="marca-rev" cx="86.0" cy="145.6" r="4" style="animation-delay:1.10s"/><circle class="marca-rev" cx="139.7" cy="129.6" r="4" style="animation-delay:1.50s"/><circle class="marca-rev" cx="254.7" cy="127.8" r="4" style="animation-delay:1.90s"/><circle class="marca-rev" cx="484.7" cy="121.7" r="4" style="animation-delay:2.30s"/>
+        <text class="rotulo-forte" x="301" y="32">com revisões espaçadas</text>
+      </svg>
+    <figcaption><b>Fig. 1</b>Curva do esquecimento. Cada revisão (<span style="color:var(--latao)">○</span>) devolve a lembrança ao topo, e a queda seguinte é mais lenta. Por isso os intervalos crescem: 2, 4, 7, 15, 30 dias.</figcaption>
+  </figure>
 </section>
 
 <section class="recursos">

@@ -45,7 +45,7 @@
     <li class="{{ 'feito' if item.feito }}">
       <div class="lr-nome">
         <a href="{{ url_for('historico', aid=item.assunto.id) }}">{{ item.assunto.nome }}</a>
-        <small>{{ item.assunto.materia }}</small>
+        <small>{{ item.assunto.materia }}{% if item.assunto.pai %} · {{ item.assunto.pai }}{% endif %}</small>
       </div>
       <div class="lr-dom">
         <span class="barra"><i class="{{ e.dominio_efetivo | cor }}" style="width: {{ (e.dominio_efetivo * 100) | round }}%"></i></span>
@@ -82,7 +82,7 @@
   <ul class="chips">
     {% for item in escolhidos %}
     <li class="chip {{ 'feito' if item.feito }}">
-      <span>{{ item.assunto.nome }} <small>· {{ item.assunto.materia }}</small></span>
+      <span>{{ item.assunto.rotulo }} <small>· {{ item.assunto.materia }}</small></span>
       {% if item.feito %}<span class="ok">✓</span>{% else %}
       <form method="post" action="{{ url_for('remover_novo', aid=item.assunto.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -99,7 +99,7 @@
       <option value="">Escolha um assunto ainda não estudado…</option>
       {% for materia, itens in novos_disponiveis | groupby('materia') %}
       <optgroup label="{{ materia }}">
-        {% for a in itens %}<option value="{{ a.id }}">{{ a.nome }}</option>{% endfor %}
+        {% for a in itens %}<option value="{{ a.id }}">{{ a.rotulo }}</option>{% endfor %}
       </optgroup>
       {% endfor %}
     </select>
@@ -129,7 +129,7 @@
       {% for item in pendentes_rev + pendentes_novos %}{% set a = item.assunto %}
       <div class="tr-linha">
         <input type="hidden" name="assunto_ids" value="{{ a.id }}">
-        <span class="tr-nome">{{ a.nome }}<small>{{ a.materia }}{% if item.estado is defined %} · revisão{% else %} · novo{% endif %}</small></span>
+        <span class="tr-nome">{{ a.nome }}<small>{{ a.materia }}{% if a.pai %} · {{ a.pai }}{% endif %}{% if item.estado is defined %} · revisão{% else %} · novo{% endif %}</small></span>
         <label><span class="so-mobile">Acertos</span><input type="number" name="acertos_{{ a.id }}" min="0" inputmode="numeric" data-acertos></label>
         <label><span class="so-mobile">Total</span><input type="number" name="total_{{ a.id }}" min="1" inputmode="numeric" data-total
           value="{{ item.estado.questoes if item.estado is defined else (fixas or '') }}"></label>

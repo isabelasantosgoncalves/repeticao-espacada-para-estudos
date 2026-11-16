@@ -17,6 +17,7 @@ import logica as L
 DEMO = ("Estudante Demo", "demo@demo.com", "demo123")
 
 # matéria -> [(assunto, dias atrás do início ou None = nunca estudado, nível inicial, ganho por sessão)]
+#            ou (assunto, [subassuntos no mesmo formato])
 CURRICULO = {
     "Matemática": [
         ("Funções do 1º grau", 70, 0.55, 0.12),
@@ -24,6 +25,13 @@ CURRICULO = {
         ("Geometria plana", 30, 0.35, 0.10),
         ("Probabilidade", 1, 0.45, 0.10),
         ("Logaritmos", None, 0, 0),
+        # Assunto com subassuntos: cada um tem o próprio domínio
+        ("Álgebra", [
+            ("Equações do 1º grau", 50, 0.80, 0.06),
+            ("Inequações", 24, 0.35, 0.07),
+            ("Sistemas lineares", 14, 0.55, 0.10),
+            ("Problemas com equações", None, 0, 0),
+        ]),
     ],
     "Português": [
         ("Crase", 60, 0.40, 0.15),
@@ -72,6 +80,27 @@ def simular(inicio: date, hoje: date, nivel: float, ganho: float, rnd: random.Ra
     return sessoes
 
 
+def criar_assunto(con, uid, mid, item, hoje, rnd, pai=None) -> int:
+    """Cria um assunto (ou subassunto) e suas sessões simuladas. Devolve quantas sessões."""
+    nome, dias_atras, nivel, ganho = item
+    aid = con.execute("INSERT INTO assuntos (usuario_id, materia_id, nome, parent_id) VALUES (?, ?, ?, ?)",
+                      (uid, mid, nome, pai)).lastrowid
+    if dias_atras is None:
+        return 0
+    inicio = hoje - timedelta(days=dias_atras)
+    if dias_atras == 1:
+        con.execute("INSERT INTO estudo_do_dia (usuario_id, assunto_id, data) VALUES (?, ?, ?)",
+                    (uid, aid, inicio.isoformat()))
+    n = 0
+    for d, acertos, total in simular(inicio, hoje, nivel, ganho, rnd):
+        con.execute(
+            """INSERT INTO sessoes (usuario_id, assunto_id, data, acertos, total, observacao)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (uid, aid, d.isoformat(), acertos, total, rnd.choice(OBSERVACOES)))
+        n += 1
+    return n
+
+
 def criar_demo(con, hoje: date) -> int:
     """Apaga e recria a conta demo. Devolve o número de sessões criadas."""
     nome, email, senha = DEMO
@@ -88,20 +117,13 @@ def criar_demo(con, hoje: date) -> int:
     n = 0
     for materia, assuntos in CURRICULO.items():
         mid = con.execute("INSERT INTO materias (usuario_id, nome) VALUES (?, ?)", (uid, materia)).lastrowid
-        for assunto, dias_atras, nivel, ganho in assuntos:
-            aid = con.execute("INSERT INTO assuntos (usuario_id, materia_id, nome) VALUES (?, ?, ?)",
-                              (uid, mid, assunto)).lastrowid
-            if dias_atras is None:
-                continue
-            inicio = hoje - timedelta(days=dias_atras)
-            if dias_atras == 1:
-                con.execute("INSERT INTO estudo_do_dia (usuario_id, assunto_id, data) VALUES (?, ?, ?)",
-                            (uid, aid, inicio.isoformat()))
-            for d, acertos, total in simular(inicio, hoje, nivel, ganho, rnd):
-                con.execute(
-                    """INSERT INTO sessoes (usuario_id, assunto_id, data, acertos, total, observacao)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (uid, aid, d.isoformat(), acertos, total, rnd.choice(OBSERVACOES)))
-                n += 1
+        for item in assuntos:
+            if isinstance(item[1], list):
+                pai = con.execute("INSERT INTO assuntos (usuario_id, materia_id, nome) VALUES (?, ?, ?)",
+                                  (uid, mid, item[0])).lastrowid
+                for sub in item[1]:
+                    n += criar_assunto(con, uid, mid, sub, hoje, rnd, pai)
+            else:
+                n += criar_assunto(con, uid, mid, item, hoje, rnd)
     con.commit()
     return n

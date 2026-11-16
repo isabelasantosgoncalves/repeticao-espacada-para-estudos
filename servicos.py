@@ -6,6 +6,7 @@ Todas as consultas filtram por usuario_id.
 from __future__ import annotations
 
 import os
+import unicodedata
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
@@ -52,14 +53,46 @@ def questoes_fixas(cfg: dict) -> int | None:
 # ---------------------------------------------------------------------------
 
 def listar_assuntos(db, uid: int) -> list[dict]:
+    """
+    Todos os assuntos do usuário, já com:
+    - pai: nome do assunto pai (subassuntos) ou None;
+    - rotulo: "Pai › Sub" ou só o nome;
+    - grupo: True se o assunto tem subassuntos (vira um agrupador: as sessões
+      e revisões acontecem nos subassuntos).
+    Ordenados por matéria, depois pai, com os subassuntos logo abaixo do pai.
+    """
     rows = db.execute(
-        """SELECT a.id, a.nome, a.materia_id, m.nome AS materia
-           FROM assuntos a JOIN materias m ON m.id = a.materia_id
+        """SELECT a.id, a.nome, a.materia_id, a.parent_id, m.nome AS materia, p.nome AS pai,
+                  (SELECT COUNT(*) FROM assuntos f WHERE f.parent_id = a.id) AS n_filhos
+           FROM assuntos a
+           JOIN materias m ON m.id = a.materia_id
+           LEFT JOIN assuntos p ON p.id = a.parent_id
            WHERE a.usuario_id = ?
-           ORDER BY m.nome COLLATE NOCASE, a.nome COLLATE NOCASE""",
+           ORDER BY m.nome COLLATE NOCASE, COALESCE(p.nome, a.nome) COLLATE NOCASE,
+                    a.parent_id IS NOT NULL, a.nome COLLATE NOCASE""",
         (uid,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    res = []
+    for r in rows:
+        a = dict(r)
+        a["rotulo"] = f"{a['pai']} › {a['nome']}" if a["pai"] else a["nome"]
+        a["grupo"] = a["n_filhos"] > 0
+        res.append(a)
+    # Ordem alfabética ignorando acentos (o SQLite poria "Álgebra" depois de "Z")
+    res.sort(key=lambda a: (chave_ordem(a["materia"]), chave_ordem(a["pai"] or a["nome"]),
+                            a["parent_id"] is not None, chave_ordem(a["nome"])))
+    return res
+
+
+def chave_ordem(texto: str) -> str:
+    """Texto sem acentos e em minúsculas, para ordenar como num dicionário."""
+    return "".join(c for c in unicodedata.normalize("NFD", texto or "")
+                   if unicodedata.category(c) != "Mn").casefold()
+
+
+def listar_folhas(db, uid: int) -> list[dict]:
+    """Assuntos que recebem sessões e entram nas revisões (os que não são grupo)."""
+    return [a for a in listar_assuntos(db, uid) if not a["grupo"]]
 
 
 def sessoes_por_assunto(db, uid: int, antes_de: date | None = None) -> dict[int, list]:
@@ -76,11 +109,14 @@ def sessoes_por_assunto(db, uid: int, antes_de: date | None = None) -> dict[int,
     return res
 
 
-def estados(db, uid: int, dia: date, cfg: dict, antes_de: date | None = None) -> dict[int, L.EstadoAssunto]:
-    """Estado de cada assunto que já tem sessões."""
+def estados(db, uid: int, dia: date, cfg: dict, antes_de: date | None = None,
+            ids: set[int] | None = None) -> dict[int, L.EstadoAssunto]:
+    """Estado de cada assunto que já tem sessões (só os de `ids`, se informado)."""
     fixas = questoes_fixas(cfg)
     res = {}
     for aid, sess in sessoes_por_assunto(db, uid, antes_de).items():
+        if ids is not None and aid not in ids:
+            continue
         e = L.analisar_assunto(aid, sess, dia, fixas)
         if e:
             res[aid] = e
@@ -100,8 +136,8 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     assuntos já feitos hoje aparecem marcados como concluídos.
     """
     cfg = carregar_config(db, uid)
-    assuntos = {a["id"]: a for a in listar_assuntos(db, uid)}
-    est = estados(db, uid, dia, cfg, antes_de=dia)
+    assuntos = {a["id"]: a for a in listar_folhas(db, uid)}   # grupos não entram na revisão
+    est = estados(db, uid, dia, cfg, antes_de=dia, ids=set(assuntos))
 
     tipo = L.tipo_de_revisao(cfg["modo"], cfg["dias_fixos"], dia)
     proximo_fixo = L.proximo_dia_fixo(dia, cfg["dias_fixos"])
@@ -167,10 +203,11 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
 
 def montar_mapa(db, uid: int, dia: date) -> dict:
     cfg = carregar_config(db, uid)
-    est = estados(db, uid, dia, cfg)
+    folhas = listar_folhas(db, uid)
+    est = estados(db, uid, dia, cfg, ids={a["id"] for a in folhas})
     grupos = {"agora": defaultdict(list), "esperar": defaultdict(list), "dominado": defaultdict(list)}
     nao_estudados = defaultdict(list)
-    for a in listar_assuntos(db, uid):
+    for a in folhas:
         e = est.get(a["id"])
         if e is None:
             nao_estudados[a["materia"]].append(a)
@@ -190,15 +227,24 @@ def montar_mapa(db, uid: int, dia: date) -> dict:
 def exportar(db, uid: int) -> dict:
     cfg = carregar_config(db, uid)
     materias = []
+    def sessoes_de(aid):
+        return [dict(s) for s in db.execute(
+            """SELECT data, acertos, total, observacao FROM sessoes
+               WHERE usuario_id = ? AND assunto_id = ? ORDER BY data, id""", (uid, aid))]
+
     for m in db.execute("SELECT id, nome FROM materias WHERE usuario_id = ? ORDER BY id", (uid,)):
         assuntos = []
         for a in db.execute(
-                "SELECT id, nome FROM assuntos WHERE usuario_id = ? AND materia_id = ? ORDER BY id",
+                """SELECT id, nome FROM assuntos
+                   WHERE usuario_id = ? AND materia_id = ? AND parent_id IS NULL ORDER BY id""",
                 (uid, m["id"])):
-            sessoes = [dict(s) for s in db.execute(
-                """SELECT data, acertos, total, observacao FROM sessoes
-                   WHERE usuario_id = ? AND assunto_id = ? ORDER BY data, id""", (uid, a["id"]))]
-            assuntos.append({"nome": a["nome"], "sessoes": sessoes})
+            item = {"nome": a["nome"], "sessoes": sessoes_de(a["id"])}
+            subs = [{"nome": s["nome"], "sessoes": sessoes_de(s["id"])} for s in db.execute(
+                "SELECT id, nome FROM assuntos WHERE usuario_id = ? AND parent_id = ? ORDER BY id",
+                (uid, a["id"]))]
+            if subs:
+                item["subassuntos"] = subs
+            assuntos.append(item)
         materias.append({"nome": m["nome"], "assuntos": assuntos})
     return {
         "app": "revisa",
@@ -250,7 +296,13 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
             nome_a = str(a.get("nome", "")).strip()[:160]
             if not nome_a:
                 raise ErroImportacao(f"Assunto sem nome em {nome_m}.")
-            assuntos.append((nome_a, [_validar_sessao(s) for s in a.get("sessoes", []) or []]))
+            subs = []
+            for s in a.get("subassuntos", []) or []:
+                nome_s = str(s.get("nome", "")).strip()[:160]
+                if not nome_s:
+                    raise ErroImportacao(f"Subassunto sem nome em {nome_a}.")
+                subs.append((nome_s, [_validar_sessao(x) for x in s.get("sessoes", []) or []]))
+            assuntos.append((nome_a, [_validar_sessao(s) for s in a.get("sessoes", []) or []], subs))
         plano.append((nome_m, assuntos))
 
     cfg_nova = dados.get("configuracoes") or {}
@@ -266,15 +318,23 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
             mid = db.execute("INSERT INTO materias (usuario_id, nome) VALUES (?, ?)",
                              (uid, nome_m)).lastrowid
             n_m += 1
-            for nome_a, sessoes in assuntos:
-                aid = db.execute("INSERT INTO assuntos (usuario_id, materia_id, nome) VALUES (?, ?, ?)",
-                                 (uid, mid, nome_a)).lastrowid
+            def gravar(nome, sessoes, pai=None):
+                nonlocal n_a, n_s
+                aid = db.execute(
+                    "INSERT INTO assuntos (usuario_id, materia_id, nome, parent_id) VALUES (?, ?, ?, ?)",
+                    (uid, mid, nome, pai)).lastrowid
                 n_a += 1
                 for data, acertos, total, obs in sessoes:
                     db.execute(
                         """INSERT INTO sessoes (usuario_id, assunto_id, data, acertos, total, observacao)
                            VALUES (?, ?, ?, ?, ?, ?)""", (uid, aid, data, acertos, total, obs))
                     n_s += 1
+                return aid
+
+            for nome_a, sessoes, subs in assuntos:
+                aid = gravar(nome_a, sessoes)
+                for nome_s, sessoes_s in subs:
+                    gravar(nome_s, sessoes_s, aid)
         if cfg_nova:
             salvar_config(db, uid, cfg_nova, commit=False)
         db.commit()

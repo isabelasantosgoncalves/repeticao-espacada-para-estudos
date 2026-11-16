@@ -6,21 +6,21 @@
   <h1>{{ 'Editar sessão' if sessao else 'Registrar sessão' }}</h1>
   <p class="sub">Anote quantas questões você fez e quantas acertou.</p>
 
-  {% if not materias or not (materias | map(attribute='assuntos') | select | list) %}
+  {% if not materias or not (materias | map(attribute='folhas') | select | list) %}
   <div class="vazio">
     <p>Você ainda não tem assuntos cadastrados.</p>
     <a class="btn" href="{{ url_for('materias') }}">Cadastrar matérias e assuntos</a>
   </div>
   {% else %}
   {% set atual = namespace(materia=None) %}
-  {% for m in materias %}{% for a in m.assuntos %}{% if a.id == v.assunto_id %}{% set atual.materia = m.id %}{% endif %}{% endfor %}{% endfor %}
+  {% for m in materias %}{% for a in m.folhas %}{% if a.id == v.assunto_id %}{% set atual.materia = m.id %}{% endif %}{% endfor %}{% endfor %}
   <form method="post" class="form" data-validar-resultados>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="grade-2">
       <label>Matéria
         <select id="sel-materia" required>
           <option value="">Escolha…</option>
-          {% for m in materias if m.assuntos %}
+          {% for m in materias if m.folhas %}
           <option value="{{ m.id }}" {{ 'selected' if m.id == atual.materia }}>{{ m.nome }}</option>
           {% endfor %}
         </select>
@@ -51,7 +51,7 @@
       {% if sessao %}<a class="btn btn-sec" href="{{ url_for('historico', aid=sessao.assunto_id) }}">Cancelar</a>{% endif %}
     </div>
   </form>
-  <script type="application/json" id="dados-assuntos">{{ materias | map(attribute='assuntos') | sum(start=[]) | tojson }}</script>
+  <script type="application/json" id="dados-assuntos">{{ materias | map(attribute='folhas') | sum(start=[]) | tojson }}</script>
   {% endif %}
 </div>
 {% endblock %}

@@ -8,7 +8,7 @@
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
   {% block head %}{% endblock %}
 </head>
@@ -17,7 +17,7 @@
   <header class="topo">
     <div class="topo-in">
       <a class="marca" href="{{ url_for('landing') }}">
-        <img src="{{ url_for('static', filename='favicon.svg') }}" alt="" width="28" height="28">
+        <img src="{{ url_for('static', filename='favicon.svg') }}" alt="" width="30" height="30">
         <span>Revisa</span>
       </a>
       {% if current_user.is_authenticated and current_user.onboarding_ok %}

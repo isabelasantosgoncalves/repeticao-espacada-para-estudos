@@ -191,20 +191,37 @@ def do_usuario(tabela: str, id_: int):
 
 
 def materias_com_assuntos(uid: int) -> list[dict]:
+    """
+    Matérias com seus assuntos de topo; cada assunto traz a lista `filhos`
+    (subassuntos). Usado na tela Matérias e no formulário de sessão.
+    """
     db = banco.get_db()
-    materias = [dict(m) for m in db.execute(
-        "SELECT id, nome FROM materias WHERE usuario_id = ? ORDER BY nome COLLATE NOCASE", (uid,))]
+    materias = sorted((dict(m) for m in db.execute(
+        "SELECT id, nome FROM materias WHERE usuario_id = ?", (uid,))), key=lambda m: S.chave_ordem(m["nome"]))
     por_materia: dict[int, list] = {m["id"]: [] for m in materias}
     contagem = {r["assunto_id"]: r["n"] for r in db.execute(
         "SELECT assunto_id, COUNT(*) AS n FROM sessoes WHERE usuario_id = ? GROUP BY assunto_id", (uid,))}
-    for a in db.execute(
-            "SELECT id, nome, materia_id FROM assuntos WHERE usuario_id = ? ORDER BY nome COLLATE NOCASE", (uid,)):
-        a = dict(a)
+    todos = S.listar_assuntos(db, uid)
+    filhos: dict[int, list] = {}
+    for a in todos:
         a["n_sessoes"] = contagem.get(a["id"], 0)
-        por_materia[a["materia_id"]].append(a)
+        if a["parent_id"]:
+            filhos.setdefault(a["parent_id"], []).append(a)
+    for a in todos:
+        if not a["parent_id"]:
+            a["filhos"] = filhos.get(a["id"], [])
+            por_materia[a["materia_id"]].append(a)
     for m in materias:
         m["assuntos"] = por_materia[m["id"]]
+        m["folhas"] = [f for a in m["assuntos"] for f in (a["filhos"] or [a])]
     return materias
+
+
+def e_grupo(aid: int) -> bool:
+    """True se o assunto tem subassuntos (então não recebe sessões diretamente)."""
+    return banco.get_db().execute(
+        "SELECT 1 FROM assuntos WHERE parent_id = ? AND usuario_id = ? LIMIT 1",
+        (aid, current_user.id)).fetchone() is not None
 
 
 def nome_valido(texto, campo: str, limite: int) -> str:
@@ -389,6 +406,8 @@ def registrar_rotas(app: Flask):
                 continue  # linha sem acertos = não feita (o total já vem sugerido)
             assunto = do_usuario("assuntos", aid)
             try:
+                if e_grupo(aid):
+                    raise ValueError("tem subassuntos; registre a sessão em um deles.")
                 acertos, total = validar_resultado(ac, tot)
             except ValueError as e:
                 erros.append(f"{assunto['nome']}: {e}")
@@ -429,6 +448,8 @@ def registrar_rotas(app: Flask):
                 aid = ler_inteiro(request.form.get("assunto_id"), "assunto")
                 valores["assunto_id"] = aid
                 do_usuario("assuntos", aid)
+                if e_grupo(aid):
+                    raise ValueError("Este assunto tem subassuntos: registre a sessão em um deles.")
                 d = validar_data(valores["data"])
                 acertos, total = validar_resultado(valores["acertos"], valores["total"])
             except ValueError as e:
@@ -498,8 +519,26 @@ def registrar_rotas(app: Flask):
             S.hoje(), S.questoes_fixas(cfg))
         grafico = {"labels": [br(s["data"]) for s in sessoes],
                    "valores": [round(s["pct"] * 100, 1) for s in sessoes]}
+
+        # Assunto pai: nome para o caminho no topo da página
+        pai = None
+        if assunto["parent_id"]:
+            pai = dict(do_usuario("assuntos", assunto["parent_id"]))
+
+        # Assunto com subassuntos: vira grupo, mostra o domínio de cada um e a média
+        filhos = [dict(f) for f in db.execute(
+            "SELECT id, nome FROM assuntos WHERE parent_id = ? AND usuario_id = ? ORDER BY nome COLLATE NOCASE",
+            (aid, current_user.id))]
+        dominio_grupo = None
+        if filhos:
+            est = S.estados(db, current_user.id, S.hoje(), cfg, ids={f["id"] for f in filhos})
+            for f in filhos:
+                f["estado"] = est.get(f["id"])
+            dominio_grupo = L.dominio_do_grupo([f["estado"].dominio_efetivo for f in filhos if f["estado"]])
+            estado = None  # o grupo em si não tem agenda própria
         return render_template("historico.html", assunto=assunto, sessoes=list(reversed(sessoes)),
-                               estado=estado, grafico=grafico)
+                               estado=estado, grafico=grafico, pai=pai, filhos=filhos,
+                               dominio_grupo=dominio_grupo)
 
     # ------------------------------------------------------- matérias/assuntos
 
@@ -548,24 +587,43 @@ def registrar_rotas(app: Flask):
     @app.route("/assuntos/novo", methods=["POST"])
     @login_required
     def criar_assunto():
+        pai_id = request.form.get("parent_id", type=int)
+
         def acao():
-            mid = ler_inteiro(request.form.get("materia_id"), "matéria")
-            do_usuario("materias", mid)
             nome = nome_valido(request.form.get("nome"), "do assunto", 160)
-            banco.get_db().execute("INSERT INTO assuntos (usuario_id, materia_id, nome) VALUES (?, ?, ?)",
-                                   (current_user.id, mid, nome))
-        return executar(acao, "Assunto criado.")
+            if pai_id:
+                # Subassunto: herda a matéria do pai; só um nível de profundidade.
+                pai = do_usuario("assuntos", pai_id)
+                if pai["parent_id"]:
+                    raise ValueError("Subassuntos não podem ter outros subassuntos.")
+                mid = pai["materia_id"]
+            else:
+                mid = ler_inteiro(request.form.get("materia_id"), "matéria")
+                do_usuario("materias", mid)
+            banco.get_db().execute(
+                "INSERT INTO assuntos (usuario_id, materia_id, nome, parent_id) VALUES (?, ?, ?, ?)",
+                (current_user.id, mid, nome, pai_id or None))
+        return executar(acao, "Subassunto criado." if pai_id else "Assunto criado.")
 
     @app.route("/assuntos/<int:aid>/editar", methods=["POST"])
     @login_required
     def editar_assunto(aid):
-        do_usuario("assuntos", aid)
+        assunto = do_usuario("assuntos", aid)
         def acao():
+            db = banco.get_db()
             nome = nome_valido(request.form.get("nome"), "do assunto", 160)
+            if assunto["parent_id"]:
+                # Subassunto: só o nome muda (a matéria é sempre a do pai).
+                db.execute("UPDATE assuntos SET nome = ? WHERE id = ? AND usuario_id = ?",
+                           (nome, aid, current_user.id))
+                return
             mid = ler_inteiro(request.form.get("materia_id"), "matéria")
             do_usuario("materias", mid)
-            banco.get_db().execute("UPDATE assuntos SET nome = ?, materia_id = ? WHERE id = ? AND usuario_id = ?",
-                                   (nome, mid, aid, current_user.id))
+            db.execute("UPDATE assuntos SET nome = ?, materia_id = ? WHERE id = ? AND usuario_id = ?",
+                       (nome, mid, aid, current_user.id))
+            # Os subassuntos acompanham o pai se ele mudar de matéria.
+            db.execute("UPDATE assuntos SET materia_id = ? WHERE parent_id = ? AND usuario_id = ?",
+                       (mid, aid, current_user.id))
         return executar(acao, "Assunto atualizado.")
 
     @app.route("/assuntos/<int:aid>/excluir", methods=["POST"])

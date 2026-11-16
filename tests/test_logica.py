@@ -281,6 +281,14 @@ class TestSelecaoGrande(unittest.TestCase):
         self.assertEqual([e.assunto_id for e in sel], [1, 3, 2])
 
 
+class TestGrupo(unittest.TestCase):
+    def test_media_simples_dos_subassuntos(self):
+        self.assertAlmostEqual(L.dominio_do_grupo([0.9, 0.3]), 0.6)
+
+    def test_sem_subassuntos_estudados(self):
+        self.assertIsNone(L.dominio_do_grupo([]))
+
+
 class TestMapa(unittest.TestCase):
     def test_classificacao(self):
         self.assertEqual(L.classificar_para_mapa(estado(1, 0.9, 0.1, HOJE), HOJE), "agora")

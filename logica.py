@@ -339,6 +339,18 @@ def selecionar_revisao_grande(
     return ordenar_por_prioridade(itens)
 
 
+def dominio_do_grupo(dominios: list[float]) -> float | None:
+    """
+    Domínio de um assunto que tem subassuntos: média simples do domínio
+    efetivo dos subassuntos já estudados (None se nenhum foi estudado).
+    Cada subassunto pesa igual, para que um ponto fraco não fique escondido
+    atrás de um subassunto com muitas sessões.
+    """
+    if not dominios:
+        return None
+    return sum(dominios) / len(dominios)
+
+
 def classificar_para_mapa(estado: EstadoAssunto, hoje: date) -> str:
     """
     Grupo do assunto no mapa de domínio:

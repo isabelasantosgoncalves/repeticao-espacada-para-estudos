@@ -33,7 +33,9 @@ CREATE TABLE IF NOT EXISTS assuntos (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
     materia_id  INTEGER NOT NULL REFERENCES materias(id) ON DELETE CASCADE,
-    nome        TEXT    NOT NULL
+    nome        TEXT    NOT NULL,
+    -- Subassunto: aponta para o assunto "pai" (um nível só). NULL = assunto de topo.
+    parent_id   INTEGER REFERENCES assuntos(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS sessoes (
@@ -84,6 +86,11 @@ def fechar_db(_erro=None):
 def iniciar_db(caminho: str):
     con = conectar(caminho)
     con.executescript(ESQUEMA)
+    # Migração: bancos criados antes dos subassuntos não têm a coluna parent_id.
+    colunas = [r["name"] for r in con.execute("PRAGMA table_info(assuntos)")]
+    if "parent_id" not in colunas:
+        con.execute("ALTER TABLE assuntos ADD COLUMN parent_id INTEGER REFERENCES assuntos(id) ON DELETE CASCADE")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_assuntos_pai ON assuntos(parent_id)")
     con.commit()
     con.close()
 

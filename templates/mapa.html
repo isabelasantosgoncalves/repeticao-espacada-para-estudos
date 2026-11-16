@@ -35,7 +35,7 @@
     <ul class="lista-mapa">
       {% for item in itens %}{% set e = item.estado %}
       <li>
-        <a class="lm-nome" href="{{ url_for('historico', aid=item.assunto.id) }}">{{ item.assunto.nome }}</a>
+        <a class="lm-nome" href="{{ url_for('historico', aid=item.assunto.id) }}">{% if item.assunto.pai %}<span class="rotulo-pai">{{ item.assunto.pai }}</span>{% endif %}{{ item.assunto.nome }}</a>
         <span class="barra barra-g" title="Domínio {{ e.dominio | pct }}{% if e.dominio_efetivo < e.dominio %}, efetivo {{ e.dominio_efetivo | pct }} pelo atraso{% endif %}">
           <i class="{{ e.dominio_efetivo | cor }}" style="width: {{ (e.dominio_efetivo * 100) | round }}%"></i>
         </span>
@@ -56,7 +56,7 @@
   <div class="bloco-cab sem-num"><div><h2>Ainda não estudados</h2><p class="sub">Escolha um deles como assunto novo na tela Hoje.</p></div></div>
   {% for materia, itens in nao_estudados | dictsort %}
   <h3 class="materia-tit">{{ materia }}</h3>
-  <ul class="chips">{% for a in itens %}<li class="chip">{{ a.nome }}</li>{% endfor %}</ul>
+  <ul class="chips">{% for a in itens %}<li class="chip">{{ a.rotulo }}</li>{% endfor %}</ul>
   {% endfor %}
 </section>
 {% endif %}

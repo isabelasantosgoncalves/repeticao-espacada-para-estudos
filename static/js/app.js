@@ -129,7 +129,7 @@
       lista.forEach(function (a) {
         var o = document.createElement('option');
         o.value = a.id;
-        o.textContent = a.nome + (a.n_sessoes ? '' : ' (novo)');
+        o.textContent = (a.rotulo || a.nome) + (a.n_sessoes ? '' : ' (novo)');
         if (String(a.id) === inicial) o.selected = true;
         selA.appendChild(o);
       });
@@ -143,7 +143,9 @@
   Revisa.grafico = function (canvas, dados) {
     if (!canvas || !window.Chart) return;
     var css = getComputedStyle(document.documentElement);
-    var cor = css.getPropertyValue('--acento').trim() || '#3451d1';
+    var cor = css.getPropertyValue('--acento').trim() || '#1f5c45';
+    Chart.defaults.font.family = '"IBM Plex Mono", monospace';
+    Chart.defaults.font.size = 11;
     var texto = css.getPropertyValue('--texto-2').trim() || '#5b6476';
     var grade = css.getPropertyValue('--linha').trim() || '#e6e4dd';
     new Chart(canvas, {
@@ -156,11 +158,12 @@
           borderColor: cor,
           backgroundColor: cor + '22',
           fill: true,
-          tension: 0.3,
+          tension: 0,
+          borderWidth: 2,
           pointRadius: 4,
           pointHoverRadius: 6,
           pointBackgroundColor: dados.valores.map(function (v) {
-            return v >= 85 ? '#1f9d6b' : v >= 50 ? '#e0a020' : '#d9483b';
+            return v >= 85 ? '#3d8a5c' : v >= 50 ? '#c08e2c' : '#b04a3a';
           }),
           pointBorderColor: '#fff',
           pointBorderWidth: 1.5

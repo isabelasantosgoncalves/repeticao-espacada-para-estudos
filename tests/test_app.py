@@ -111,6 +111,51 @@ class TestApp(unittest.TestCase):
         self.assertIn("Inglês", html)
         self.assertNotIn("Temporária", html)
 
+    def test_subassuntos(self):
+        from datetime import date, timedelta
+        ONTEM = (date.today() - timedelta(days=1)).isoformat()
+        self.criar_usuario("s@s.com")
+        self.post("/materias/nova", {"nome": "SAT Math"}, "/materias")
+        self.post("/assuntos/novo", {"nome": "Algebra", "materia_id": "1"}, "/materias")       # id 1
+        self.post("/assuntos/novo", {"nome": "Equations", "parent_id": "1"}, "/materias")      # id 2
+        self.post("/assuntos/novo", {"nome": "Inequalities", "parent_id": "1"}, "/materias")   # id 3
+        # subassunto de subassunto não é permitido
+        self.post("/assuntos/novo", {"nome": "Profundo", "parent_id": "2"}, "/materias")
+        self.assertNotIn("Profundo", self.c.get("/materias").get_data(as_text=True))
+        # o grupo não recebe sessão; o subassunto recebe
+        r = self.post("/sessoes/nova", {"assunto_id": "1", "data": ONTEM, "acertos": "5", "total": "10"},
+                      "/sessoes/nova")
+        self.assertIn("subassuntos", r.get_data(as_text=True))
+        self.post("/sessoes/nova", {"assunto_id": "2", "data": ONTEM, "acertos": "9", "total": "10"},
+                  "/sessoes/nova")
+        self.post("/sessoes/nova", {"assunto_id": "3", "data": ONTEM, "acertos": "3", "total": "10"},
+                  "/sessoes/nova")
+        html = self.c.get("/assuntos/1").get_data(as_text=True)
+        self.assertIn("60%", html)            # média de 90% e 30%
+        mapa = self.c.get("/mapa").get_data(as_text=True)
+        self.assertIn("Inequalities", mapa)
+        # exportar e importar preserva a hierarquia
+        dados = self.c.get("/configuracoes/exportar").get_json()
+        subs = dados["materias"][0]["assuntos"][0]["subassuntos"]
+        self.assertEqual([x["nome"] for x in subs], ["Equations", "Inequalities"])
+        import io, json
+        self.c.post("/configuracoes/importar", data={
+            "csrf_token": self.token("/configuracoes"), "confirmar": "1",
+            "arquivo": (io.BytesIO(json.dumps(dados).encode()), "b.json")}, content_type="multipart/form-data")
+        self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["materias"], dados["materias"])
+        # excluir o pai remove os subassuntos
+        self.post("/assuntos/4/excluir", {}, "/materias")
+        self.assertNotIn("Inequalities", self.c.get("/materias").get_data(as_text=True))
+
+    def test_subassunto_em_assunto_alheio(self):
+        self.criar_usuario("a@a.com")
+        self.post("/materias/nova", {"nome": "Bio"}, "/materias")
+        self.post("/assuntos/novo", {"nome": "Citologia", "materia_id": "1"}, "/materias")
+        self.sair()
+        self.criar_usuario("b@b.com")
+        r = self.post("/assuntos/novo", {"nome": "Intruso", "parent_id": "1"}, "/materias")
+        self.assertEqual(r.status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()
