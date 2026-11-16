@@ -103,7 +103,24 @@ def dominio(percentuais: list[float], totais: list[int] | None = None) -> float:
     return sum(p * w for (p, _), w in zip(ultimas, pesos)) / soma_pesos
 
 
-def calcular_intervalo(percentuais: list[float], totais: list[int] | None = None) -> tuple[int, int]:
+def fator_bonus(total: int | None, sugeridas: int) -> float:
+    """
+    Quanto o intervalo cresce numa sessão boa da sequência.
+
+    Fez pelo menos as questões sugeridas -> dobra (x2). Fez menos -> cresce
+    em proporção: 1 de 4 sugeridas -> x1,25; 3 de 6 -> x1,5. Assim uma
+    sessão de 1 questão não vale o mesmo bônus que uma revisão completa.
+    """
+    if total is None or sugeridas <= 0:
+        return 2.0
+    return 1.0 + min(1.0, total / sugeridas)
+
+
+def calcular_intervalo(
+    percentuais: list[float],
+    totais: list[int] | None = None,
+    questoes_fixas: int | None = None,
+) -> tuple[int, int]:
     """
     Intervalo (em dias) até a próxima revisão e o tamanho da sequência boa atual.
 
@@ -112,8 +129,10 @@ def calcular_intervalo(percentuais: list[float], totais: list[int] | None = None
       e não só à última sessão. Uma sessão ruim e pequena reduz o intervalo
       aos poucos; várias seguidas o levam até o fundo da tabela.
     - Bônus: com 2 ou mais sessões seguidas >= 85% (e domínio >= 85%), o
-      intervalo anterior dobra a cada nova sessão boa (15 -> 30 -> 60).
-      Nunca fica abaixo do valor da tabela e é limitado a INTERVALO_MAXIMO.
+      intervalo anterior cresce a cada nova sessão boa: dobra se a sessão
+      teve pelo menos as questões sugeridas (15 -> 30 -> 60), ou cresce em
+      proporção se teve menos (ver fator_bonus). Nunca fica abaixo do valor
+      da tabela e é limitado a INTERVALO_MAXIMO.
     - Uma sessão abaixo de 85% zera a sequência e o intervalo volta ao da
       tabela para o domínio atual.
     """
@@ -123,14 +142,17 @@ def calcular_intervalo(percentuais: list[float], totais: list[int] | None = None
         totais = [None] * len(percentuais)
     intervalo = 0
     sequencia = 0
+    sugeridas = 0   # questões que o app sugeria antes da sessão atual
     for i, pct in enumerate(percentuais):
         dom = dominio(percentuais[: i + 1], totais[: i + 1])
         dias_tabela, _ = faixa_da_tabela(dom)
         sequencia = sequencia + 1 if pct + EPS >= LIMIAR_BOM else 0
         if sequencia >= 2 and dom + EPS >= LIMIAR_BOM:
-            intervalo = min(max(intervalo * 2, dias_tabela), INTERVALO_MAXIMO)
+            crescido = round(intervalo * fator_bonus(totais[i], sugeridas))
+            intervalo = min(max(crescido, dias_tabela), INTERVALO_MAXIMO)
         else:
             intervalo = dias_tabela
+        sugeridas = questoes_sugeridas(dom, questoes_fixas)
     return intervalo, sequencia
 
 
@@ -203,7 +225,7 @@ def analisar_assunto(
     totais = [total for _, _, total in sessoes]
 
     dom = dominio(pcts, totais)
-    intervalo, sequencia = calcular_intervalo(pcts, totais)
+    intervalo, sequencia = calcular_intervalo(pcts, totais, questoes_fixas)
     ultima_data = sessoes[-1][0]
     proxima = ultima_data + timedelta(days=intervalo)
     atraso = dias_de_atraso(proxima, hoje)

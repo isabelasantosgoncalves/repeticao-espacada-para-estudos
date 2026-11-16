@@ -78,6 +78,7 @@ A tabela é aplicada ao **domínio** (e não só à última sessão), então a m
 | ≥ 95%    | 30 dias         | 4        |
 
 - **Bônus**: com 2 ou mais sessões seguidas ≥ 85% (e domínio ≥ 85%), o intervalo anterior **dobra** a cada nova sessão boa (15 → 30 → 60 …). O intervalo nunca fica abaixo do da tabela e tem um teto de segurança de 180 dias.
+  - O bônus é proporcional ao tamanho da sessão: só dobra se você fez pelo menos as questões sugeridas. Com menos, cresce na proporção (`1 + feitas/sugeridas`): acertar 1 de 1 quando o app sugeria 6 leva 30 dias para 35, não para 60.
 - Uma sessão abaixo de 85% encerra a sequência, e o intervalo volta ao da tabela para o domínio atual.
 - Se o usuário escolheu **número fixo** de questões, ele substitui a coluna "Questões".
 

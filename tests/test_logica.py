@@ -72,6 +72,20 @@ class TestIntervalo(unittest.TestCase):
         # 100% e 100%: 30 -> 60
         self.assertEqual(L.calcular_intervalo([1.0, 1.0])[0], 60)
 
+    def test_bonus_completo_dobra(self):
+        # 3ª sessão com 20 questões (sugeridas: 6) -> dobra 30 -> 60
+        self.assertEqual(L.calcular_intervalo([0.9, 0.9, 0.9], [20, 20, 20])[0], 60)
+
+    def test_bonus_sessao_pequena_cresce_pouco(self):
+        # 1 de 1 com 6 sugeridas: 30 x (1 + 1/6) = 35, não 60
+        self.assertEqual(L.calcular_intervalo([0.9, 0.9, 1.0], [20, 20, 1])[0], 35)
+
+    def test_fator_bonus(self):
+        self.assertEqual(L.fator_bonus(4, 4), 2.0)
+        self.assertEqual(L.fator_bonus(10, 4), 2.0)
+        self.assertAlmostEqual(L.fator_bonus(1, 4), 1.25)
+        self.assertEqual(L.fator_bonus(None, 6), 2.0)
+
     def test_bonus_tem_teto(self):
         self.assertEqual(L.calcular_intervalo([1.0] * 10)[0], L.INTERVALO_MAXIMO)
 
