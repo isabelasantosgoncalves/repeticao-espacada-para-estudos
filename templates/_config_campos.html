@@ -1,10 +1,42 @@
 {# Campos de configuração usados no onboarding e na tela Configurações #}
+{% macro ritmo(cfg) %}
+<div class="opcoes">
+  {% for valor, titulo, desc, forte, fraco in [
+      ('leve', 'Leve', 'Estou aprendendo o conteúdo e faço questões aos poucos.', '30 dias', '2 dias'),
+      ('moderado', 'Moderado', 'Já tenho a base e faço questões com regularidade.', '22 dias', '2 dias'),
+      ('intenso', 'Intenso', 'Estou na fase só de questões, todos os dias.', '15 dias', '1 dia')] %}
+  <label class="opcao">
+    <input type="radio" name="ritmo" value="{{ valor }}" {{ 'checked' if cfg.ritmo == valor }} required>
+    <span><b>{{ titulo }}</b><small>{{ desc }}</small>
+      <small class="opcao-meta">Assunto que você domina volta em {{ forte }} · assunto em que você erra muito volta em {{ fraco }}</small></span>
+  </label>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro aprendizado(cfg) %}
+<div class="opcoes">
+  {% for valor, titulo, desc, seq in [
+      ('padrao', 'Equilíbrio (recomendado)', 'Uma semana, depois quinze dias, depois o intervalo normal.', '7 → 15 → 30 → 60 dias'),
+      ('cautelosa', 'Esqueço rápido', 'O conteúdo é muito novo para mim ou costumo esquecer em poucos dias. Três degraus antes de espaçar.', '4 → 10 → 20 → 40 dias'),
+      ('degraus', 'Quero confirmar bem', 'Prefiro revisar logo cedo, em três degraus, antes de espaçar.', '3 → 7 → 15 → 30 dias'),
+      ('solta', 'Já tenho base', 'Os assuntos não são totalmente novos; posso espaçar mais cedo.', '10 → 20 → 40 dias')] %}
+  <label class="opcao">
+    <input type="radio" name="aprendizado" value="{{ valor }}" {{ 'checked' if cfg.aprendizado == valor }} required>
+    <span><b>{{ titulo }}</b><small>{{ desc }}</small>
+      <small class="opcao-meta">Acertando tudo: {{ seq }} (ritmo leve)</small></span>
+  </label>
+  {% endfor %}
+</div>
+{% endmacro %}
+
 {% macro modo(cfg) %}
 <div class="opcoes" data-grupo="modo">
   {% for valor, titulo, desc in [
-      ('fixa', 'Só fixa', 'Uma revisão grande nos dias que você escolher.'),
-      ('diaria', 'Só diária', 'Todo dia, uma revisão curta com poucos assuntos.'),
-      ('ambos', 'Fixa + diária', 'Revisão grande no dia fixo e a mínima nos outros dias.')] %}
+      ('completa', 'Todo dia, tudo que vencer', 'Para a fase de questões: todo dia você revisa todos os assuntos que chegaram na data (ou atrasaram), do mais urgente para o menos. Sem limite.'),
+      ('diaria', 'Todo dia, poucos assuntos', 'Uma revisão curta diária: o assunto que você estudou ontem + os de menor domínio, até o número que você escolher.'),
+      ('fixa', 'Um dia fixo na semana', 'Uma revisão grande no(s) dia(s) que você escolher, com tudo que venceu e o que vence até a próxima.'),
+      ('ambos', 'Dia fixo + poucos assuntos', 'Revisão grande no dia fixo e a revisão curta nos outros dias.')] %}
   <label class="opcao">
     <input type="radio" name="modo" value="{{ valor }}" {{ 'checked' if cfg.modo == valor }} required>
     <span><b>{{ titulo }}</b><small>{{ desc }}</small></span>

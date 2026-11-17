@@ -64,6 +64,7 @@
     <span>Próxima revisão</span>
     <b class="{{ 'txt-vermelho' if estado.atraso }}">{{ estado.proxima_revisao | br }}</b>
     <small>{{ estado.proxima_revisao | relativo }} · intervalo de {{ estado.intervalo }} dias</small>
+    {% if estado.em_aprendizado %}<small class="tag tag-leve fase">fase de aprendizado · sessão {{ estado.n_sessoes }} de {{ estado.fase_total }}</small>{% endif %}
   </div>
   <div class="stat">
     <span>Questões sugeridas</span>

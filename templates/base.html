@@ -6,9 +6,12 @@
   <title>{% block titulo %}Revisa{% endblock %} · Revisa</title>
   <meta name="description" content="Revisa: repetição espaçada para organizar suas revisões de estudo.">
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="manifest" href="{{ url_for('manifest') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <meta name="theme-color" content="#1f5c45">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,400..600,50,1;1,9..144,400..500,50,1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/estilo.css') }}">
   {% block head %}{% endblock %}
 </head>

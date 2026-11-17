@@ -44,6 +44,14 @@ def carregar_config(db, uid: int) -> dict:
     return cfg
 
 
+def fator(cfg: dict) -> float:
+    return L.fator_do_ritmo(cfg.get("ritmo"))
+
+
+def tetos(cfg: dict) -> tuple[int, ...]:
+    return L.tetos_da_fase(cfg.get("aprendizado"))
+
+
 def questoes_fixas(cfg: dict) -> int | None:
     return cfg["questoes_modo"] == "fixo" and cfg["questoes_fixas"] or None
 
@@ -117,7 +125,7 @@ def estados(db, uid: int, dia: date, cfg: dict, antes_de: date | None = None,
     for aid, sess in sessoes_por_assunto(db, uid, antes_de).items():
         if ids is not None and aid not in ids:
             continue
-        e = L.analisar_assunto(aid, sess, dia, fixas)
+        e = L.analisar_assunto(aid, sess, dia, fixas, fator=fator(cfg), tetos=tetos(cfg))
         if e:
             res[aid] = e
     return res
@@ -129,7 +137,7 @@ def estados(db, uid: int, dia: date, cfg: dict, antes_de: date | None = None,
 
 def montar_hoje(db, uid: int, dia: date) -> dict:
     """
-    Monta os três blocos da tela Hoje.
+    Monta o painel da tela Hoje.
 
     A seleção da revisão usa só as sessões ANTERIORES a hoje, para que a lista
     não mude enquanto o usuário registra resultados ao longo do dia. Os
@@ -157,6 +165,8 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
         selecao = L.selecionar_revisao_grande(list(est.values()), dia, proximo_fixo)
     elif tipo == "diaria":
         selecao = L.selecionar_revisao_diaria(list(est.values()), ids_ontem, cfg["revisao_minima"])
+    elif tipo == "completa":
+        selecao = L.selecionar_revisao_completa(list(est.values()), dia)
     else:
         selecao = []
 
@@ -173,25 +183,38 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
             revisao.append({"assunto": assuntos[e.assunto_id], "estado": e,
                             "feito": feitas_hoje.get(e.assunto_id)})
 
-    # Assunto novo: assuntos sem nenhuma sessão
+    # ---- Painel: números do dia, próximos dias e progresso no conteúdo ----
+    # Estado ATUAL (inclui as sessões de hoje) para atrasos, domínio e agenda.
+    atual = estados(db, uid, dia, cfg, ids=set(assuntos))
+
+    proximos = []
+    for i in range(1, 8):
+        d = dia + timedelta(days=i)
+        proximos.append({"data": d, "n": sum(1 for e in atual.values() if e.proxima_revisao == d)})
+
     com_sessao = {r["assunto_id"] for r in db.execute(
         "SELECT DISTINCT assunto_id FROM sessoes WHERE usuario_id = ?", (uid,))}
-    escolhidos_ids = [r["assunto_id"] for r in db.execute(
-        "SELECT assunto_id FROM estudo_do_dia WHERE usuario_id = ? AND data = ? ORDER BY id",
-        (uid, dia.isoformat()))]
-    novos_disponiveis = [a for a in assuntos.values()
-                         if a["id"] not in com_sessao and a["id"] not in escolhidos_ids]
-    escolhidos = [{"assunto": assuntos[i], "feito": feitas_hoje.get(i)}
-                  for i in escolhidos_ids if i in assuntos]
+    nao_estudados = [a for a in assuntos.values() if a["id"] not in com_sessao]
+
+    # Sessões de hoje em assuntos que não estavam na revisão (ex.: assunto novo)
+    na_revisao = {item["assunto"]["id"] for item in revisao}
+    extras = [{"assunto": assuntos[aid], "feito": f} for aid, f in feitas_hoje.items()
+              if aid in assuntos and aid not in na_revisao]
 
     return {
         "cfg": cfg,
         "tipo": tipo,
         "proximo_fixo": proximo_fixo,
         "revisao": revisao,
+        "feitas": sum(1 for item in revisao if item["feito"]),
         "total_questoes": sum(item["estado"].questoes for item in revisao),
-        "novos_disponiveis": novos_disponiveis,
-        "escolhidos": escolhidos,
+        "atrasados": sum(1 for e in atual.values() if e.atraso > 0),
+        "dominio_medio": (sum(e.dominio_efetivo for e in atual.values()) / len(atual)) if atual else None,
+        "proximos": proximos,
+        "max_proximos": max([p["n"] for p in proximos] + [1]),
+        "nao_estudados": nao_estudados,
+        "total_assuntos": len(assuntos),
+        "extras": extras,
         "fixas": questoes_fixas(cfg),
         "tem_assuntos": bool(assuntos),
     }
@@ -256,6 +279,8 @@ def exportar(db, uid: int) -> dict:
             "revisao_minima": cfg["revisao_minima"],
             "questoes_modo": cfg["questoes_modo"],
             "questoes_fixas": cfg["questoes_fixas"],
+            "ritmo": cfg["ritmo"],
+            "aprendizado": cfg["aprendizado"],
         },
         "materias": materias,
     }
@@ -353,7 +378,7 @@ def validar_config(form: dict) -> dict:
     if isinstance(dias, str):
         dias = [d for d in dias.split(",") if d.strip()]
     dias = sorted({int(d) for d in dias if 0 <= int(d) <= 6})
-    if modo in ("fixa", "ambos") and not dias:
+    if modo in L.MODOS_COM_DIA_FIXO and not dias:
         raise ValueError("Escolha pelo menos um dia para a revisão fixa.")
     minima = int(form.get("revisao_minima") or 2)
     if not 1 <= minima <= 50:
@@ -364,8 +389,15 @@ def validar_config(form: dict) -> dict:
     qfixas = int(form.get("questoes_fixas") or 10)
     if not 1 <= qfixas <= 500:
         raise ValueError("O número fixo de questões deve ficar entre 1 e 500.")
+    ritmo = form.get("ritmo") or "leve"
+    if ritmo not in L.RITMOS:
+        raise ValueError("Escolha um ritmo de estudo válido.")
+    aprendizado = form.get("aprendizado") or "padrao"
+    if aprendizado not in L.FASES_APRENDIZADO:
+        raise ValueError("Escolha uma opção válida para assuntos novos.")
     return {"modo": modo, "dias_fixos": dias, "revisao_minima": minima,
-            "questoes_modo": qmodo, "questoes_fixas": qfixas}
+            "questoes_modo": qmodo, "questoes_fixas": qfixas, "ritmo": ritmo,
+            "aprendizado": aprendizado}
 
 
 def salvar_config(db, uid: int, dados: dict, commit: bool = True):
@@ -373,8 +405,8 @@ def salvar_config(db, uid: int, dados: dict, commit: bool = True):
     carregar_config(db, uid)  # garante que a linha existe
     db.execute(
         """UPDATE configuracoes SET modo = ?, dias_fixos = ?, revisao_minima = ?,
-           questoes_modo = ?, questoes_fixas = ? WHERE usuario_id = ?""",
+           questoes_modo = ?, questoes_fixas = ?, ritmo = ?, aprendizado = ? WHERE usuario_id = ?""",
         (c["modo"], ",".join(map(str, c["dias_fixos"])), c["revisao_minima"],
-         c["questoes_modo"], c["questoes_fixas"], uid))
+         c["questoes_modo"], c["questoes_fixas"], c["ritmo"], c["aprendizado"], uid))
     if commit:
         db.commit()

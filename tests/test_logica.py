@@ -8,6 +8,12 @@ import logica as L
 HOJE = date(2026, 3, 10)  # uma terça-feira
 
 
+def ci(*args, **kwargs):
+    """calcular_intervalo sem a fase de aprendizado, para testar tabela e bônus isolados."""
+    kwargs.setdefault("tetos", ())
+    return L.calcular_intervalo(*args, **kwargs)
+
+
 def estado(aid, dom_ef, prio, proxima=HOJE):
     """Atalho para montar um EstadoAssunto nos testes de seleção."""
     return L.EstadoAssunto(
@@ -57,28 +63,28 @@ class TestTabela(unittest.TestCase):
 
 class TestIntervalo(unittest.TestCase):
     def test_uma_sessao_usa_tabela(self):
-        self.assertEqual(L.calcular_intervalo([0.4]), (2, 0))
-        self.assertEqual(L.calcular_intervalo([0.75]), (7, 0))
-        self.assertEqual(L.calcular_intervalo([0.9]), (15, 1))
+        self.assertEqual(ci([0.4]), (2, 0))
+        self.assertEqual(ci([0.75]), (7, 0))
+        self.assertEqual(ci([0.9]), (15, 1))
 
     def test_bonus_dobra(self):
-        self.assertEqual(L.calcular_intervalo([0.9, 0.9])[0], 30)
-        self.assertEqual(L.calcular_intervalo([0.9, 0.9, 0.9])[0], 60)
-        self.assertEqual(L.calcular_intervalo([0.9, 0.9, 0.9, 0.9])[0], 120)
+        self.assertEqual(ci([0.9, 0.9])[0], 30)
+        self.assertEqual(ci([0.9, 0.9, 0.9])[0], 60)
+        self.assertEqual(ci([0.9, 0.9, 0.9, 0.9])[0], 120)
 
     def test_bonus_nunca_abaixo_da_tabela(self):
         # 90% (15 dias) seguido de 100%: dobra para 30, igual à tabela
-        self.assertEqual(L.calcular_intervalo([0.9, 1.0])[0], 30)
+        self.assertEqual(ci([0.9, 1.0])[0], 30)
         # 100% e 100%: 30 -> 60
-        self.assertEqual(L.calcular_intervalo([1.0, 1.0])[0], 60)
+        self.assertEqual(ci([1.0, 1.0])[0], 60)
 
     def test_bonus_completo_dobra(self):
         # 3ª sessão com 20 questões (sugeridas: 6) -> dobra 30 -> 60
-        self.assertEqual(L.calcular_intervalo([0.9, 0.9, 0.9], [20, 20, 20])[0], 60)
+        self.assertEqual(ci([0.9, 0.9, 0.9], [20, 20, 20])[0], 60)
 
     def test_bonus_sessao_pequena_cresce_pouco(self):
         # 1 de 1 com 6 sugeridas: 30 x (1 + 1/6) = 35, não 60
-        self.assertEqual(L.calcular_intervalo([0.9, 0.9, 1.0], [20, 20, 1])[0], 35)
+        self.assertEqual(ci([0.9, 0.9, 1.0], [20, 20, 1])[0], 35)
 
     def test_fator_bonus(self):
         self.assertEqual(L.fator_bonus(4, 4), 2.0)
@@ -87,22 +93,22 @@ class TestIntervalo(unittest.TestCase):
         self.assertEqual(L.fator_bonus(None, 6), 2.0)
 
     def test_bonus_tem_teto(self):
-        self.assertEqual(L.calcular_intervalo([1.0] * 10)[0], L.INTERVALO_MAXIMO)
+        self.assertEqual(ci([1.0] * 10)[0], L.INTERVALO_MAXIMO)
 
     def test_queda_usa_tabela_pelo_dominio(self):
         # domínio = 0,5·60 + 0,3·90 + 0,2·90 = 75% -> 7 dias, sem bônus
-        self.assertEqual(L.calcular_intervalo([0.9, 0.9, 0.9, 0.6]), (7, 0))
+        self.assertEqual(ci([0.9, 0.9, 0.9, 0.6]), (7, 0))
         # domínio = 0,5·30 + 0,3·90 + 0,2·90 = 60% -> 4 dias
-        self.assertEqual(L.calcular_intervalo([0.9, 0.9, 0.3]), (4, 0))
+        self.assertEqual(ci([0.9, 0.9, 0.3]), (4, 0))
         # sessão de 80% quebra a sequência; domínio 85% -> 15 dias da tabela
-        self.assertEqual(L.calcular_intervalo([0.9, 0.9, 0.8]), (15, 0))
+        self.assertEqual(ci([0.9, 0.9, 0.8]), (15, 0))
 
     def test_quedas_seguidas_chegam_ao_fundo_da_tabela(self):
-        self.assertEqual(L.calcular_intervalo([0.3, 0.3, 0.3])[0], 2)
+        self.assertEqual(ci([0.3, 0.3, 0.3])[0], 2)
 
     def test_sequencia_recomeca(self):
         # sequência quebrada: domínio 81% -> 7 dias, sequência 1
-        self.assertEqual(L.calcular_intervalo([0.9, 0.6, 0.9]), (7, 1))
+        self.assertEqual(ci([0.9, 0.6, 0.9]), (7, 1))
 
 
 class TestSessoesPequenas(unittest.TestCase):
@@ -112,14 +118,14 @@ class TestSessoesPequenas(unittest.TestCase):
         pcts, totais = [0.9, 0.9, 0.5], [20, 20, 2]
         # pesos: 0,5·0,2 = 0,1 | 0,3 | 0,2  -> (0,05 + 0,27 + 0,18) / 0,6 = 83,3%
         self.assertAlmostEqual(L.dominio(pcts, totais), 0.5 / 0.6)
-        self.assertEqual(L.calcular_intervalo(pcts, totais), (7, 0))
+        self.assertEqual(ci(pcts, totais), (7, 0))
 
     def test_sessao_grande_ruim_mexe_mais(self):
         pcts, totais = [0.9, 0.9, 0.5], [20, 20, 20]
         self.assertAlmostEqual(L.dominio(pcts, totais), 0.70)
-        self.assertEqual(L.calcular_intervalo(pcts, totais)[0], 7)
+        self.assertEqual(ci(pcts, totais)[0], 7)
         pcts, totais = [0.9, 0.9, 0.3], [20, 20, 20]
-        self.assertEqual(L.calcular_intervalo(pcts, totais)[0], 4)
+        self.assertEqual(ci(pcts, totais)[0], 4)
 
     def test_pequenas_ruins_seguidas_descem_aos_poucos(self):
         base, tb = [0.9, 0.9], [20, 20]
@@ -129,7 +135,7 @@ class TestSessoesPequenas(unittest.TestCase):
         self.assertGreater(d1, d2)
         self.assertGreater(d2, d3)
         self.assertAlmostEqual(d3, 0.5)   # só sessões pequenas na janela: pesam igual
-        intervalos = [L.calcular_intervalo(base + [0.5] * k, tb + [2] * k)[0] for k in (1, 2, 3)]
+        intervalos = [ci(base + [0.5] * k, tb + [2] * k)[0] for k in (1, 2, 3)]
         self.assertEqual(intervalos, [7, 7, 4])
 
     def test_estado_usa_totais(self):
@@ -190,11 +196,12 @@ class TestAnalisarAssunto(unittest.TestCase):
         self.assertIsNone(L.analisar_assunto(1, [], HOJE))
 
     def test_estado_completo(self):
-        d0 = HOJE - timedelta(days=30)
+        d0 = HOJE - timedelta(days=15)
         sessoes = [(d0, 9, 10), (d0 + timedelta(days=5), 18, 20)]  # 90%, 90%
         e = L.analisar_assunto(7, sessoes, HOJE)
-        self.assertEqual(e.intervalo, 30)
-        self.assertEqual(e.proxima_revisao, d0 + timedelta(days=35))
+        # 2ª sessão ainda na fase de aprendizado: bônus daria 30, o teto é 15
+        self.assertEqual(e.intervalo, 15)
+        self.assertEqual(e.proxima_revisao, d0 + timedelta(days=20))
         self.assertEqual(e.atraso, 0)
         self.assertAlmostEqual(e.dominio, 0.9)
         self.assertEqual(e.questoes, 6)
@@ -228,6 +235,8 @@ class TestAgenda(unittest.TestCase):
         self.assertEqual(L.tipo_de_revisao("diaria", [], HOJE), "diaria")
         self.assertEqual(L.tipo_de_revisao("ambos", [1], HOJE), "grande")
         self.assertEqual(L.tipo_de_revisao("ambos", [6], HOJE), "diaria")
+        self.assertEqual(L.tipo_de_revisao("completa", [], HOJE), "completa")
+        self.assertEqual(L.tipo_de_revisao("completa", [1], HOJE), "completa")
 
 
 class TestSelecaoDiaria(unittest.TestCase):
@@ -281,12 +290,87 @@ class TestSelecaoGrande(unittest.TestCase):
         self.assertEqual([e.assunto_id for e in sel], [1, 3, 2])
 
 
+class TestFaseDeAprendizado(unittest.TestCase):
+    def test_assunto_novo_nao_vai_direto_para_30_dias(self):
+        self.assertEqual(L.calcular_intervalo([1.0], [5])[0], 7)
+        self.assertEqual(L.calcular_intervalo([1.0, 1.0], [5, 5])[0], 15)
+        self.assertEqual(L.calcular_intervalo([1.0, 1.0, 1.0], [5, 5, 5])[0], 30)
+        self.assertEqual(L.calcular_intervalo([1.0] * 4, [5] * 4)[0], 60)
+
+    def test_teto_nao_aumenta_intervalo_curto(self):
+        # errou muito: a tabela (2 dias) já é menor que o teto
+        self.assertEqual(L.calcular_intervalo([0.3], [10])[0], 2)
+
+    def test_estado_marca_fase(self):
+        d = HOJE - timedelta(days=1)
+        self.assertTrue(L.analisar_assunto(1, [(d, 5, 5)], HOJE).em_aprendizado)
+        tres = [(d - timedelta(days=20), 5, 5), (d - timedelta(days=10), 5, 5), (d, 5, 5)]
+        self.assertFalse(L.analisar_assunto(1, tres, HOJE).em_aprendizado)
+
+
+class TestEscolhaDaFase(unittest.TestCase):
+    def test_opcoes(self):
+        seq = lambda nome, n: L.calcular_intervalo([1.0] * n, [10] * n, tetos=L.tetos_da_fase(nome))[0]
+        self.assertEqual([seq("padrao", n) for n in (1, 2, 3, 4)], [7, 15, 30, 60])
+        self.assertEqual([seq("cautelosa", n) for n in (1, 2, 3, 4)], [4, 10, 20, 40])
+        self.assertEqual([seq("degraus", n) for n in (1, 2, 3, 4)], [3, 7, 15, 30])
+        self.assertEqual([seq("solta", n) for n in (1, 2, 3)], [10, 20, 40])
+        # o rótulo de cada opção mostra exatamente essa sequência
+        self.assertEqual([seq("cautelosa", n) for n in (1, 2, 3, 4, 5)], [4, 10, 20, 40, 80])
+
+    def test_desconhecida_usa_padrao(self):
+        self.assertEqual(L.tetos_da_fase(None), L.TETOS_APRENDIZADO)
+        self.assertEqual(L.tetos_da_fase("xyz"), L.TETOS_APRENDIZADO)
+
+    def test_fase_de_tres_degraus_no_estado(self):
+        d = HOJE - timedelta(days=1)
+        sess = [(d - timedelta(days=10), 5, 5), (d - timedelta(days=5), 5, 5), (d, 5, 5)]
+        e = L.analisar_assunto(1, sess, HOJE, tetos=L.tetos_da_fase("degraus"))
+        self.assertTrue(e.em_aprendizado)
+        self.assertEqual(e.fase_total, 3)
+
+
+class TestRitmo(unittest.TestCase):
+    def test_fatores(self):
+        self.assertEqual(L.fator_do_ritmo("leve"), 1.0)
+        self.assertEqual(L.fator_do_ritmo("moderado"), 0.75)
+        self.assertEqual(L.fator_do_ritmo("intenso"), 0.5)
+        self.assertEqual(L.fator_do_ritmo(None), 1.0)
+
+    def test_tabela_em_cada_ritmo(self):
+        tabela = [2, 4, 7, 15, 30]
+        self.assertEqual([L.aplicar_ritmo(d, 0.75) for d in tabela], [2, 3, 5, 11, 22])
+        self.assertEqual([L.aplicar_ritmo(d, 0.5) for d in tabela], [1, 2, 4, 8, 15])
+
+    def test_ritmo_vale_para_o_bonus(self):
+        base = L.calcular_intervalo([1.0] * 4, [5] * 4)[0]          # 60
+        self.assertEqual(L.calcular_intervalo([1.0] * 4, [5] * 4, fator=0.5)[0], base // 2)
+
+    def test_estado_usa_fator(self):
+        d = HOJE - timedelta(days=1)
+        e = L.analisar_assunto(1, [(d, 5, 5)], HOJE, fator=0.5)
+        self.assertEqual(e.intervalo, 4)          # teto 7 x 0,5
+
+
+
 class TestGrupo(unittest.TestCase):
     def test_media_simples_dos_subassuntos(self):
         self.assertAlmostEqual(L.dominio_do_grupo([0.9, 0.3]), 0.6)
 
     def test_sem_subassuntos_estudados(self):
         self.assertIsNone(L.dominio_do_grupo([]))
+
+
+class TestSelecaoCompleta(unittest.TestCase):
+    def test_tudo_que_vence_ou_atrasou_sem_limite(self):
+        estados = [
+            estado(1, 0.5, 2.0, proxima=HOJE - timedelta(days=5)),   # atrasado
+            estado(2, 0.8, 0.2, proxima=HOJE),                       # vence hoje
+            estado(3, 0.6, 0.4, proxima=HOJE + timedelta(days=1)),   # amanhã: fica de fora
+            estado(4, 0.3, 0.7, proxima=HOJE),                       # vence hoje
+        ]
+        sel = L.selecionar_revisao_completa(estados, HOJE)
+        self.assertEqual([e.assunto_id for e in sel], [1, 4, 2])
 
 
 class TestMapa(unittest.TestCase):

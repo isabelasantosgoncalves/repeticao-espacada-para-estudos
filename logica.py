@@ -42,6 +42,31 @@ INTERVALO_MAXIMO = 180     # teto de segurança para o bônus (dias)
 PERDA_POR_SEMANA = 0.05    # esquecimento: -5 pontos percentuais por semana de atraso
 PESO_ATRASO = 0.1          # cada dia de atraso soma 0,1 na prioridade
 
+# Fase de aprendizado: teto do intervalo depois da 1ª e da 2ª sessão de um
+# assunto. Mesmo acertando tudo, um assunto novo volta em até 7 dias e depois
+# em até 15, antes de seguir livre pela tabela (30 dias, bônus...).
+TETOS_APRENDIZADO = (7, 15)
+
+# O usuário escolhe como quer a fase de aprendizado (onboarding/Configurações).
+FASES_APRENDIZADO = {
+    "cautelosa": (4, 10, 20), # esquece rápido / conteúdo muito novo: 4 -> 10 -> 20 -> 40
+    "degraus": (3, 7, 15),    # confirma bem antes de espaçar:        3 -> 7 -> 15 -> 30
+    "padrao": (7, 15),        # equilíbrio (recomendado):             7 -> 15 -> 30 -> 60
+    "solta": (10, 20),        # já tem alguma base:                   10 -> 20 -> 40
+}
+
+
+def tetos_da_fase(nome: str | None) -> tuple[int, ...]:
+    return FASES_APRENDIZADO.get(nome or "padrao", TETOS_APRENDIZADO)
+
+# Ritmo de estudo: multiplica o intervalo final. Quem faz mais questões
+# (fase só de questões) revisa com mais frequência.
+RITMOS = {
+    "leve": 1.0,       # estudando conteúdo + questões
+    "moderado": 0.75,  # rotina regular de questões
+    "intenso": 0.5,    # fase só de questões
+}
+
 
 # ---------------------------------------------------------------------------
 # Funções básicas
@@ -120,6 +145,8 @@ def calcular_intervalo(
     percentuais: list[float],
     totais: list[int] | None = None,
     questoes_fixas: int | None = None,
+    tetos: tuple[int, ...] = TETOS_APRENDIZADO,
+    fator: float = 1.0,
 ) -> tuple[int, int]:
     """
     Intervalo (em dias) até a próxima revisão e o tamanho da sequência boa atual.
@@ -135,6 +162,10 @@ def calcular_intervalo(
       da tabela e é limitado a INTERVALO_MAXIMO.
     - Uma sessão abaixo de 85% zera a sequência e o intervalo volta ao da
       tabela para o domínio atual.
+    - Fase de aprendizado: depois da sessão n (n <= len(tetos)) o intervalo
+      fica limitado a tetos[n-1]. O bônus seguinte parte do valor limitado,
+      então um assunto novo cresce aos poucos (7 -> 15 -> 30 -> 60).
+    - Ritmo: no fim, o intervalo é multiplicado por `fator` (mínimo 1 dia).
     """
     if not percentuais:
         raise ValueError("é preciso ao menos uma sessão")
@@ -152,8 +183,19 @@ def calcular_intervalo(
             intervalo = min(max(crescido, dias_tabela), INTERVALO_MAXIMO)
         else:
             intervalo = dias_tabela
+        if i < len(tetos):
+            intervalo = min(intervalo, tetos[i])
         sugeridas = questoes_sugeridas(dom, questoes_fixas)
-    return intervalo, sequencia
+    return aplicar_ritmo(intervalo, fator), sequencia
+
+
+def aplicar_ritmo(intervalo: int, fator: float) -> int:
+    """Intervalo ajustado ao ritmo de estudo (ex.: 30 dias x 0,75 = 22)."""
+    return max(1, round(intervalo * fator))
+
+
+def fator_do_ritmo(ritmo: str | None) -> float:
+    return RITMOS.get(ritmo or "leve", 1.0)
 
 
 def questoes_sugeridas(dominio_atual: float, numero_fixo: int | None = None) -> int:
@@ -201,10 +243,16 @@ class EstadoAssunto:
     dominio_efetivo: float
     prioridade: float
     questoes: int
+    fase_total: int = len(TETOS_APRENDIZADO)   # quantas sessões dura a fase de aprendizado
 
     @property
     def vencido(self) -> bool:
         return self.atraso > 0
+
+    @property
+    def em_aprendizado(self) -> bool:
+        """True enquanto o intervalo ainda está sob o teto da fase de aprendizado."""
+        return self.n_sessoes <= self.fase_total
 
 
 def analisar_assunto(
@@ -212,6 +260,8 @@ def analisar_assunto(
     sessoes: list[tuple[date, int, int]],
     hoje: date,
     questoes_fixas: int | None = None,
+    fator: float = 1.0,
+    tetos: tuple[int, ...] = TETOS_APRENDIZADO,
 ) -> EstadoAssunto | None:
     """
     Calcula o estado de um assunto a partir das suas sessões.
@@ -225,7 +275,7 @@ def analisar_assunto(
     totais = [total for _, _, total in sessoes]
 
     dom = dominio(pcts, totais)
-    intervalo, sequencia = calcular_intervalo(pcts, totais, questoes_fixas)
+    intervalo, sequencia = calcular_intervalo(pcts, totais, questoes_fixas, tetos=tetos, fator=fator)
     ultima_data = sessoes[-1][0]
     proxima = ultima_data + timedelta(days=intervalo)
     atraso = dias_de_atraso(proxima, hoje)
@@ -244,6 +294,7 @@ def analisar_assunto(
         dominio_efetivo=dom_ef,
         prioridade=prioridade(dom_ef, atraso),
         questoes=questoes_sugeridas(dom, questoes_fixas),
+        fase_total=len(tetos),
     )
 
 
@@ -251,7 +302,13 @@ def analisar_assunto(
 # Agenda: que tipo de revisão acontece hoje
 # ---------------------------------------------------------------------------
 
-MODOS = ("fixa", "diaria", "ambos")
+# fixa     -> revisão grande só no(s) dia(s) fixo(s)
+# diaria   -> todo dia, revisão mínima (poucos assuntos)
+# ambos    -> revisão grande no dia fixo + mínima nos outros dias
+# completa -> todo dia, tudo que vence ou está atrasado (fase só de questões)
+MODOS = ("fixa", "diaria", "ambos", "completa")
+MODOS_COM_DIA_FIXO = ("fixa", "ambos")
+MODOS_COM_MINIMA = ("diaria", "ambos")
 
 
 def proximo_dia_fixo(hoje: date, dias_fixos: list[int]) -> date | None:
@@ -269,8 +326,11 @@ def tipo_de_revisao(modo: str, dias_fixos: list[int], hoje: date) -> str | None:
     """
     'grande'  -> hoje é dia fixo (modos 'fixa' e 'ambos');
     'diaria'  -> revisão mínima (modo 'diaria', ou 'ambos' fora do dia fixo);
+    'completa'-> modo 'completa': todo dia, tudo que vence;
     None      -> modo 'fixa' fora do dia fixo: não há revisão hoje.
     """
+    if modo == "completa":
+        return "completa"
     e_dia_fixo = hoje.weekday() in dias_fixos
     if modo in ("fixa", "ambos") and e_dia_fixo:
         return "grande"
@@ -349,6 +409,14 @@ def dominio_do_grupo(dominios: list[float]) -> float | None:
     if not dominios:
         return None
     return sum(dominios) / len(dominios)
+
+
+def selecionar_revisao_completa(estados: list[EstadoAssunto], hoje: date) -> list[EstadoAssunto]:
+    """
+    Revisão completa do dia (fase só de questões): tudo que vence hoje ou já
+    venceu, da maior para a menor prioridade. Sem limite de assuntos.
+    """
+    return ordenar_por_prioridade([e for e in estados if e.proxima_revisao <= hoje])
 
 
 def classificar_para_mapa(estado: EstadoAssunto, hoje: date) -> str:

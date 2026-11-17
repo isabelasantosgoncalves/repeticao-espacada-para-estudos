@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS configuracoes (
     dias_fixos      TEXT    NOT NULL DEFAULT '6',       -- ex.: '0,3' (0 = segunda)
     revisao_minima  INTEGER NOT NULL DEFAULT 2,
     questoes_modo   TEXT    NOT NULL DEFAULT 'auto',    -- auto | fixo
-    questoes_fixas  INTEGER NOT NULL DEFAULT 10
+    questoes_fixas  INTEGER NOT NULL DEFAULT 10,
+    ritmo           TEXT    NOT NULL DEFAULT 'leve',    -- leve | moderado | intenso
+    aprendizado     TEXT    NOT NULL DEFAULT 'padrao'   -- cautelosa | degraus | padrao | solta
 );
 
 CREATE TABLE IF NOT EXISTS materias (
@@ -91,6 +93,12 @@ def iniciar_db(caminho: str):
     if "parent_id" not in colunas:
         con.execute("ALTER TABLE assuntos ADD COLUMN parent_id INTEGER REFERENCES assuntos(id) ON DELETE CASCADE")
     con.execute("CREATE INDEX IF NOT EXISTS ix_assuntos_pai ON assuntos(parent_id)")
+    # Migração: ritmo de estudo
+    colunas = [r["name"] for r in con.execute("PRAGMA table_info(configuracoes)")]
+    if "ritmo" not in colunas:
+        con.execute("ALTER TABLE configuracoes ADD COLUMN ritmo TEXT NOT NULL DEFAULT 'leve'")
+    if "aprendizado" not in colunas:
+        con.execute("ALTER TABLE configuracoes ADD COLUMN aprendizado TEXT NOT NULL DEFAULT 'padrao'")
     con.commit()
     con.close()
 

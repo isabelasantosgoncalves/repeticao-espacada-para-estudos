@@ -15,13 +15,14 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 ## Funcionalidades
 
 - **Contas de usuário**: cadastro, login e logout, senhas com hash. Cada usuário só vê e edita os próprios dados (checado no backend em todas as rotas).
-- **Onboarding** no primeiro acesso: modo de revisão, dia(s) fixo(s), revisão mínima diária e questões por assunto.
-- **Hoje**: em três blocos, (1) a revisão do dia com a quantidade de questões de cada assunto, (2) a escolha do assunto novo e (3) o registro rápido dos resultados.
+- **Onboarding** no primeiro acesso, antes de entrar no app: ritmo de estudo, fase de aprendizado, modo de revisão, dia(s) fixo(s), revisão mínima diária e questões por assunto.
+- **Hoje (painel)**: números do dia (revisões feitas, questões sugeridas, atrasados, domínio médio), a lista de revisões com registro direto na linha (acertos + Enter), a agenda dos próximos 7 dias e o progresso nos assuntos ainda não começados.
 - **Registrar sessão**: formulário rápido (matéria → assunto, data, acertos, total, observação).
 - **Mapa de domínio**: assuntos por matéria com barra colorida (vermelho < 50%, amarelo 50–84%, verde ≥ 85%), separados em *Revisar agora*, *Pode esperar* e *Dominado*.
 - **Histórico do assunto**: lista de sessões (editar/excluir) e gráfico de linha da % de acerto (Chart.js).
 - **Matérias, assuntos e subassuntos**: criar, renomear, mover e excluir. Um assunto pode ter subassuntos (ex.: Álgebra → Equações, Inequações, Sistemas lineares), e cada um tem o próprio domínio e a própria agenda.
 - **Configurações**: tudo do onboarding, mais **exportar** e **importar** os dados em JSON.
+- **Instalável como app** (PWA): no Chrome/Edge aparece "Instalar Revisa" na barra de endereço; no celular, "Adicionar à tela inicial".
 - **Conta demo** com dados de exemplo (`demo@demo.com` / `demo123`).
 - Proteção CSRF em todos os formulários, validação de dados (acertos ≤ total, total > 0) e datas no formato dd/mm/aaaa.
 
@@ -93,6 +94,31 @@ A tabela é aplicada ao **domínio** (e não só à última sessão), então a m
 
 Uma sessão pequena e ruim mexe pouco; várias seguidas levam o assunto para o fundo da tabela.
 
+**Fase de aprendizado.** Um assunto novo não vai direto para 30 dias, mesmo com 100% de acerto:
+nas primeiras sessões o intervalo tem um teto. Como o bônus parte do valor limitado, quem acerta
+tudo avança aos poucos. O usuário escolhe a opção no onboarding e em Configurações:
+
+| Opção | Tetos | Acertando tudo |
+|---|---|---|
+| Equilíbrio (padrão) | 7, 15 | 7 → 15 → 30 → 60 dias |
+| Esqueço rápido | 4, 10, 20 | 4 → 10 → 20 → 40 dias |
+| Quero confirmar bem | 3, 7, 15 | 3 → 7 → 15 → 30 dias |
+| Já tenho base | 10, 20 | 10 → 20 → 40 dias |
+
+Se a sessão vai mal, a tabela já dá um intervalo menor que o teto, e ele vale normalmente.
+
+**Ritmo de estudo.** Escolhido no onboarding e em Configurações, multiplica o intervalo final
+(inclusive bônus e fase de aprendizado):
+
+| Ritmo | Para quem | Fator | Tabela |
+|---|---|---|---|
+| Leve | estudando conteúdo + questões | ×1 | 2 · 4 · 7 · 15 · 30 dias |
+| Moderado | rotina regular de questões | ×0,75 | 2 · 3 · 5 · 11 · 22 dias |
+| Intenso | fase só de questões | ×0,5 | 1 · 2 · 4 · 8 · 15 dias |
+
+Como tudo é calculado a partir do histórico, trocar o ritmo recalcula na hora as datas de todos os
+assuntos.
+
 ### 3. Esquecimento
 
 Se a revisão atrasar, o domínio cai **5 pontos percentuais por semana completa** de atraso (mínimo 0):
@@ -113,9 +139,13 @@ Assuntos com domínio baixo e assuntos atrasados sobem na fila. As revisões sã
 
 | Modo | No dia fixo | Nos outros dias |
 |---|---|---|
-| Só fixa | Revisão grande | Sem revisão (só assunto novo) |
-| Só diária | — | Revisão mínima |
-| Fixa + diária | Revisão grande | Revisão mínima |
+| Todo dia, tudo que vencer | — | Revisão completa: tudo que vence ou atrasou, sem limite |
+| Todo dia, poucos assuntos | — | Revisão mínima |
+| Um dia fixo na semana | Revisão grande | Sem revisão (só assunto novo) |
+| Dia fixo + poucos assuntos | Revisão grande | Revisão mínima |
+
+O modo "tudo que vencer" é pensado para a fase só de questões (ritmo Intenso): no onboarding,
+ele já vem sugerido quando a pessoa escolhe esse ritmo.
 
 - **Revisão mínima diária**: o assunto estudado ontem + os assuntos de menor domínio efetivo, até completar N assuntos (padrão 2). Se o assunto de ontem também é o de menor domínio, ele entra uma vez só e a vaga vai para o próximo.
 - **Revisão grande**: tudo que já venceu e não foi feito + tudo que vence antes do próximo dia fixo, por prioridade, sem limite de questões.

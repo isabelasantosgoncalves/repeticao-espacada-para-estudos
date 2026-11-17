@@ -7,7 +7,15 @@
 
 <form method="post" class="painel form" id="form-config">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <h2>Modo de revisão</h2>
+  <h2>Ritmo de estudo</h2>
+  <p class="sub">Define de quanto em quanto tempo cada assunto volta. Quanto mais intenso, mais cedo ele volta. Ao trocar, as datas de todos os assuntos são recalculadas na hora.</p>
+  {{ campos.ritmo(cfg) }}
+
+  <h2>Assuntos novos</h2>
+  <p class="sub">Fase de aprendizado: quantas vezes um assunto novo volta antes de seguir a tabela normal.</p>
+  {{ campos.aprendizado(cfg) }}
+
+  <h2>Quando você revisa</h2>
   {{ campos.modo(cfg) }}
 
   <div data-secao="dias">

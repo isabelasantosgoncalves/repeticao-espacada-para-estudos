@@ -66,8 +66,8 @@
     function aplicavel(i) {
       var modo = modoAtual(form);
       var n = passos[i].getAttribute('data-passo');
-      if (n === '2') return modo === 'fixa' || modo === 'ambos';
-      if (n === '3') return modo === 'diaria' || modo === 'ambos';
+      if (n === 'dias') return modo === 'fixa' || modo === 'ambos';
+      if (n === 'minima') return modo === 'diaria' || modo === 'ambos';
       return true;
     }
     function proximo(i, dir) {
@@ -84,7 +84,7 @@
       bConcluir.hidden = !ultimo;
     }
     bAvancar.addEventListener('click', function () {
-      if (passos[atual].getAttribute('data-passo') === '2' && !checarDias(form)) {
+      if (passos[atual].getAttribute('data-passo') === 'dias' && !checarDias(form)) {
         form.querySelector('input[name="dias_fixos"]').reportValidity();
         return;
       }
@@ -92,7 +92,20 @@
       mostrar();
     });
     bVoltar.addEventListener('click', function () { atual = Math.max(0, proximo(atual, -1)); mostrar(); });
-    form.addEventListener('change', function () { checarDias(form); mostrar(); });
+    // Sugestão: ritmo intenso combina com "todo dia, tudo que vencer".
+    // Só muda o modo enquanto a pessoa ainda não escolheu um por conta própria.
+    var modoTocado = false;
+    var modoPadrao = modoAtual(form);
+    form.addEventListener('change', function (ev) {
+      if (ev.target.name === 'modo') modoTocado = true;
+      if (ev.target.name === 'ritmo' && !modoTocado) {
+        var alvo = ev.target.value === 'intenso' ? 'completa' : modoPadrao;
+        var radio = form.querySelector('input[name="modo"][value="' + alvo + '"]');
+        if (radio) radio.checked = true;
+      }
+      checarDias(form);
+      mostrar();
+    });
     mostrar();
   };
 
@@ -101,8 +114,8 @@
     if (!form) return;
     function atualizar() {
       var modo = modoAtual(form);
-      form.querySelector('[data-secao="dias"]').hidden = modo === 'diaria';
-      form.querySelector('[data-secao="minima"]').hidden = modo === 'fixa';
+      form.querySelector('[data-secao="dias"]').hidden = !(modo === 'fixa' || modo === 'ambos');
+      form.querySelector('[data-secao="minima"]').hidden = !(modo === 'diaria' || modo === 'ambos');
       checarDias(form);
     }
     form.addEventListener('change', atualizar);
@@ -185,5 +198,42 @@
     });
   };
 
+  // Matérias: botão Editar/Concluir alterna o modo do bloco sem recarregar.
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-alternar-edicao]');
+    if (!link) return;
+    var bloco = link.closest('.mt');
+    if (!bloco) return;
+    ev.preventDefault();
+    var editar = !bloco.classList.contains('editando');
+    document.querySelectorAll('.mt.editando').forEach(function (b) { b.classList.remove('editando'); });
+    if (editar) bloco.classList.add('editando');
+    try { history.replaceState(null, '', link.getAttribute('href')); } catch (e) {}
+  });
+
+  // Formulários de edição: o botão Salvar só aparece quando algo mudou.
+  document.addEventListener('input', function (ev) {
+    var form = ev.target.closest('[data-sujo], .ed-novo');
+    if (!form) return;
+    var mudou = Array.prototype.some.call(form.elements, function (el) {
+      if (el.type === 'text') return form.classList.contains('ed-novo') ? el.value.trim() !== '' : el.value !== el.defaultValue;
+      if (el.tagName === 'SELECT') return !el.options[el.selectedIndex].defaultSelected;
+      return false;
+    });
+    form.classList.toggle('sujo', mudou);
+  });
+  document.addEventListener('change', function (ev) {
+    if (ev.target.tagName === 'SELECT' && ev.target.closest('[data-sujo]')) {
+      ev.target.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+
   window.Revisa = Revisa;
+
+  // Service worker: permite instalar o Revisa como app (Chrome/Edge/Android).
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js').catch(function () {});
+    });
+  }
 })();

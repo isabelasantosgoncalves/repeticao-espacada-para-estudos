@@ -156,6 +156,40 @@ class TestApp(unittest.TestCase):
         r = self.post("/assuntos/novo", {"nome": "Intruso", "parent_id": "1"}, "/materias")
         self.assertEqual(r.status_code, 404)
 
+    def test_modo_completa_nao_exige_dia_fixo(self):
+        self.criar_usuario("c@c.com")
+        self.c.post("/configuracoes", data={
+            "csrf_token": self.token("/configuracoes"), "ritmo": "intenso", "aprendizado": "padrao",
+            "modo": "completa", "revisao_minima": "2", "questoes_modo": "auto", "questoes_fixas": "10"})
+        cfg = self.c.get("/configuracoes/exportar").get_json()["configuracoes"]
+        self.assertEqual(cfg["modo"], "completa")
+        self.post("/materias/nova", {"nome": "Math"}, "/materias")
+        self.post("/assuntos/novo", {"nome": "Algebra", "materia_id": "1"}, "/materias")
+        self.assertIn("vence hoje ou está atrasado", self.c.get("/hoje").get_data(as_text=True))
+
+    def test_pwa(self):
+        r = self.c.get("/manifest.webmanifest")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("application/manifest+json", r.headers["Content-Type"])
+        self.assertEqual(r.get_json()["display"], "standalone")
+        r = self.c.get("/sw.js")
+        self.assertIn("javascript", r.headers["Content-Type"])
+        self.assertEqual(self.c.get("/offline").status_code, 200)
+
+    def test_onboarding_salva_ritmo_e_fase(self):
+        tok = self.token("/cadastro")
+        self.c.post("/cadastro", data={"nome": "N", "email": "r@r.com", "senha": "segredo1", "csrf_token": tok})
+        self.c.post("/onboarding", data={
+            "csrf_token": self.token("/onboarding"), "ritmo": "intenso", "aprendizado": "degraus",
+            "modo": "diaria", "revisao_minima": "3", "questoes_modo": "auto", "questoes_fixas": "10"})
+        cfg = self.c.get("/configuracoes/exportar").get_json()["configuracoes"]
+        self.assertEqual((cfg["ritmo"], cfg["aprendizado"]), ("intenso", "degraus"))
+        # valor inválido não é aceito
+        self.c.post("/configuracoes", data={
+            "csrf_token": self.token("/configuracoes"), "ritmo": "turbo", "aprendizado": "degraus",
+            "modo": "diaria", "revisao_minima": "3", "questoes_modo": "auto", "questoes_fixas": "10"})
+        self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["configuracoes"]["ritmo"], "intenso")
+
 
 if __name__ == "__main__":
     unittest.main()

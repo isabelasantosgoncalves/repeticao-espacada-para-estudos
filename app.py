@@ -245,7 +245,7 @@ def registrar_rotas(app: Flask):
             if not enviado or not secrets.compare_digest(enviado, session.get("csrf", "")):
                 abort(400, "Sessão expirada. Recarregue a página e tente de novo.")
         # Onboarding obrigatório no primeiro acesso
-        livres = {"onboarding", "sair", "static", "landing"}
+        livres = {"onboarding", "sair", "static", "landing", "manifest", "service_worker", "offline"}
         if (current_user.is_authenticated and not current_user.onboarding_ok
                 and request.endpoint not in livres):
             return redirect(url_for("onboarding"))
@@ -266,6 +266,27 @@ def registrar_rotas(app: Flask):
     @app.errorhandler(413)
     def muito_grande(_e):
         return render_template("erro.html", codigo=413, mensagem="Arquivo grande demais (máximo 5 MB)."), 413
+
+    # ------------------------------------------------------------------ PWA
+    # Manifesto e service worker servidos na raiz, para valerem para o site todo
+    # (é isso que faz o Chrome oferecer "Instalar Revisa").
+
+    @app.route("/manifest.webmanifest")
+    def manifest():
+        r = app.send_static_file("manifest.webmanifest")
+        r.mimetype = "application/manifest+json"
+        return r
+
+    @app.route("/sw.js")
+    def service_worker():
+        r = app.send_static_file("sw.js")
+        r.mimetype = "application/javascript"
+        r.headers["Cache-Control"] = "no-cache"
+        return r
+
+    @app.route("/offline")
+    def offline():
+        return render_template("offline.html")
 
     # ------------------------------------------------------------------ público
 
@@ -366,29 +387,6 @@ def registrar_rotas(app: Flask):
         dados = S.montar_hoje(banco.get_db(), current_user.id, S.hoje())
         return render_template("hoje.html", **dados)
 
-    @app.route("/hoje/novo", methods=["POST"])
-    @login_required
-    def escolher_novo():
-        aid = request.form.get("assunto_id", type=int)
-        if not aid:
-            flash("Escolha um assunto.", "erro")
-            return redirect(url_for("hoje") + "#novo")
-        do_usuario("assuntos", aid)
-        db = banco.get_db()
-        db.execute("INSERT OR IGNORE INTO estudo_do_dia (usuario_id, assunto_id, data) VALUES (?, ?, ?)",
-                   (current_user.id, aid, S.hoje().isoformat()))
-        db.commit()
-        return redirect(url_for("hoje") + "#novo")
-
-    @app.route("/hoje/novo/<int:aid>/remover", methods=["POST"])
-    @login_required
-    def remover_novo(aid):
-        db = banco.get_db()
-        db.execute("DELETE FROM estudo_do_dia WHERE usuario_id = ? AND assunto_id = ? AND data = ?",
-                   (current_user.id, aid, S.hoje().isoformat()))
-        db.commit()
-        return redirect(url_for("hoje") + "#novo")
-
     @app.route("/hoje/registrar", methods=["POST"])
     @login_required
     def registrar_hoje():
@@ -418,16 +416,16 @@ def registrar_rotas(app: Flask):
             for e in erros:
                 flash(e, "erro")
             flash("Nada foi salvo. Corrija os campos e envie de novo.", "erro")
-            return redirect(url_for("hoje") + "#registrar")
+            return redirect(url_for("hoje") + "#revisao")
         if not linhas:
             flash("Preencha acertos e total de pelo menos um assunto.", "erro")
-            return redirect(url_for("hoje") + "#registrar")
+            return redirect(url_for("hoje") + "#revisao")
         db.executemany(
             "INSERT INTO sessoes (usuario_id, assunto_id, data, acertos, total, observacao) VALUES (?, ?, ?, ?, ?, ?)",
             linhas)
         db.commit()
         flash(f"{len(linhas)} resultado(s) registrado(s). Bom trabalho!", "ok")
-        return redirect(url_for("hoje") + "#registrar")
+        return redirect(url_for("hoje") + "#revisao")
 
     # ---------------------------------------------------------------- sessões
 
@@ -516,7 +514,7 @@ def registrar_rotas(app: Flask):
         cfg = S.carregar_config(db, current_user.id)
         estado = L.analisar_assunto(
             aid, [(date.fromisoformat(s["data"]), s["acertos"], s["total"]) for s in sessoes],
-            S.hoje(), S.questoes_fixas(cfg))
+            S.hoje(), S.questoes_fixas(cfg), fator=S.fator(cfg), tetos=S.tetos(cfg))
         grafico = {"labels": [br(s["data"]) for s in sessoes],
                    "valores": [round(s["pct"] * 100, 1) for s in sessoes]}
 
@@ -545,25 +543,33 @@ def registrar_rotas(app: Flask):
     @app.route("/materias")
     @login_required
     def materias():
-        return render_template("materias.html", materias=materias_com_assuntos(current_user.id))
+        return render_template("materias.html", materias=materias_com_assuntos(current_user.id),
+                               editando=request.args.get("editar", type=int))
 
-    def executar(acao, ok_msg):
-        """Executa uma alteração simples e volta para a tela de matérias."""
+    def executar(acao, ok_msg, mid=None):
+        """
+        Executa uma alteração e volta para a tela de matérias na MESMA matéria
+        (âncora #materia-ID), mantendo o modo de edição se ele estava aberto.
+        `acao` pode devolver o id da matéria (ex.: matéria recém-criada).
+        """
         try:
-            acao()
+            r = acao()
         except ValueError as e:
             flash(str(e), "erro")
         else:
             banco.get_db().commit()
             flash(ok_msg, "ok")
-        return redirect(url_for("materias"))
+            mid = r or mid
+        args = {"editar": mid} if mid and request.form.get("editando") else {}
+        return redirect(url_for("materias", **args) + (f"#materia-{mid}" if mid else ""))
 
     @app.route("/materias/nova", methods=["POST"])
     @login_required
     def criar_materia():
         def acao():
             nome = nome_valido(request.form.get("nome"), "da matéria", 120)
-            banco.get_db().execute("INSERT INTO materias (usuario_id, nome) VALUES (?, ?)", (current_user.id, nome))
+            return banco.get_db().execute("INSERT INTO materias (usuario_id, nome) VALUES (?, ?)",
+                                          (current_user.id, nome)).lastrowid
         return executar(acao, "Matéria criada.")
 
     @app.route("/materias/<int:mid>/editar", methods=["POST"])
@@ -574,7 +580,7 @@ def registrar_rotas(app: Flask):
             nome = nome_valido(request.form.get("nome"), "da matéria", 120)
             banco.get_db().execute("UPDATE materias SET nome = ? WHERE id = ? AND usuario_id = ?",
                                    (nome, mid, current_user.id))
-        return executar(acao, "Matéria renomeada.")
+        return executar(acao, "Matéria renomeada.", mid)
 
     @app.route("/materias/<int:mid>/excluir", methods=["POST"])
     @login_required
@@ -603,7 +609,9 @@ def registrar_rotas(app: Flask):
             banco.get_db().execute(
                 "INSERT INTO assuntos (usuario_id, materia_id, nome, parent_id) VALUES (?, ?, ?, ?)",
                 (current_user.id, mid, nome, pai_id or None))
-        return executar(acao, "Subassunto criado." if pai_id else "Assunto criado.")
+            return mid
+        return executar(acao, "Subassunto criado." if pai_id else "Assunto criado.",
+                        request.form.get("materia_id", type=int))
 
     @app.route("/assuntos/<int:aid>/editar", methods=["POST"])
     @login_required
@@ -616,23 +624,24 @@ def registrar_rotas(app: Flask):
                 # Subassunto: só o nome muda (a matéria é sempre a do pai).
                 db.execute("UPDATE assuntos SET nome = ? WHERE id = ? AND usuario_id = ?",
                            (nome, aid, current_user.id))
-                return
-            mid = ler_inteiro(request.form.get("materia_id"), "matéria")
+                return assunto["materia_id"]
+            mid = request.form.get("materia_id", type=int) or assunto["materia_id"]
             do_usuario("materias", mid)
             db.execute("UPDATE assuntos SET nome = ?, materia_id = ? WHERE id = ? AND usuario_id = ?",
                        (nome, mid, aid, current_user.id))
             # Os subassuntos acompanham o pai se ele mudar de matéria.
             db.execute("UPDATE assuntos SET materia_id = ? WHERE parent_id = ? AND usuario_id = ?",
                        (mid, aid, current_user.id))
-        return executar(acao, "Assunto atualizado.")
+            return mid
+        return executar(acao, "Assunto atualizado.", assunto["materia_id"])
 
     @app.route("/assuntos/<int:aid>/excluir", methods=["POST"])
     @login_required
     def excluir_assunto(aid):
-        do_usuario("assuntos", aid)
+        assunto = do_usuario("assuntos", aid)
         def acao():
             banco.get_db().execute("DELETE FROM assuntos WHERE id = ? AND usuario_id = ?", (aid, current_user.id))
-        return executar(acao, "Assunto excluído, com suas sessões.")
+        return executar(acao, "Excluído, com as sessões.", assunto["materia_id"])
 
     # ----------------------------------------------------------- configurações
 

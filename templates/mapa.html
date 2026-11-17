@@ -52,7 +52,7 @@
 {% endfor %}
 
 {% if nao_estudados %}
-<section class="bloco">
+<section class="bloco" id="nao-estudados">
   <div class="bloco-cab sem-num"><div><h2>Ainda não estudados</h2><p class="sub">Escolha um deles como assunto novo na tela Hoje.</p></div></div>
   {% for materia, itens in nao_estudados | dictsort %}
   <h3 class="materia-tit">{{ materia }}</h3>

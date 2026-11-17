@@ -5,35 +5,47 @@
 {% block conteudo %}
 <div class="painel">
   <p class="selo">Primeiros passos</p>
-  <h1>Como você quer revisar?</h1>
-  <p class="sub">Quatro perguntas rápidas. Dá para mudar tudo depois em Configurações.</p>
+  <h1>Como você estuda?</h1>
+  <p class="sub">Algumas perguntas rápidas para montar suas revisões. Dá para mudar tudo depois em Configurações.</p>
 
   <ol class="progresso" aria-hidden="true">
-    <li class="on"></li><li></li><li></li><li></li>
+    <li class="on"></li><li></li><li></li><li></li><li></li><li></li>
   </ol>
 
   <form method="post" id="onboarding" class="form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-    <section class="passo" data-passo="1">
-      <h2><span class="num">1</span> Modo de revisão</h2>
+    <section class="passo" data-passo="ritmo">
+      <h2><span class="num">1</span> Qual é o seu ritmo de estudo agora?</h2>
+      <p class="sub">Define de quanto em quanto tempo cada assunto volta. Quanto mais intenso, mais cedo ele volta. Você pode trocar quando mudar de fase.</p>
+      {{ campos.ritmo(cfg) }}
+    </section>
+
+    <section class="passo" data-passo="aprendizado" hidden>
+      <h2><span class="num">2</span> Como você se sai com assuntos novos?</h2>
+      <p class="sub">Mesmo acertando tudo, um assunto novo volta algumas vezes antes de ir para intervalos longos. Escolha o quanto quer confirmar.</p>
+      {{ campos.aprendizado(cfg) }}
+    </section>
+
+    <section class="passo" data-passo="modo" hidden>
+      <h2><span class="num">3</span> Quando você revisa?</h2>
       {{ campos.modo(cfg) }}
     </section>
 
-    <section class="passo" data-passo="2" hidden>
-      <h2><span class="num">2</span> Dia(s) da revisão fixa</h2>
+    <section class="passo" data-passo="dias" hidden>
+      <h2><span class="num">4</span> Dia(s) da revisão fixa</h2>
       <p class="sub">Nesses dias você faz a revisão grande: tudo que venceu e tudo que vence até o próximo dia fixo.</p>
       {{ campos.dias(cfg) }}
     </section>
 
-    <section class="passo" data-passo="3" hidden>
-      <h2><span class="num">3</span> Revisão mínima diária</h2>
+    <section class="passo" data-passo="minima" hidden>
+      <h2><span class="num">5</span> Revisão mínima diária</h2>
       <p class="sub">Quantos assuntos revisar nos dias comuns: o que você estudou ontem + os de menor domínio.</p>
       {{ campos.minima(cfg) }}
     </section>
 
-    <section class="passo" data-passo="4" hidden>
-      <h2><span class="num">4</span> Questões por assunto</h2>
+    <section class="passo" data-passo="questoes" hidden>
+      <h2><span class="num">6</span> Questões por assunto</h2>
       {{ campos.questoes(cfg) }}
     </section>
 
