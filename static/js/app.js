@@ -178,7 +178,7 @@
       var lista = assuntos.filter(function (a) { return a.materia_id === mid; });
       var vazio = document.createElement('option');
       vazio.value = '';
-      vazio.textContent = isNaN(mid) ? 'Escolha a matéria primeiro' : 'Escolha o assunto…';
+      vazio.textContent = isNaN(mid) ? 'Escolha a seção primeiro' : 'Escolha o assunto…';
       selA.appendChild(vazio);
       lista.forEach(function (a) {
         var o = document.createElement('option');
@@ -243,14 +243,26 @@
   document.addEventListener('click', function (ev) {
     var link = ev.target.closest('[data-alternar-edicao]');
     if (!link) return;
-    var bloco = link.closest('.mt');
+    var bloco = link.closest('[data-bloco]');
     if (!bloco) return;
     ev.preventDefault();
     var editar = !bloco.classList.contains('editando');
-    document.querySelectorAll('.mt.editando').forEach(function (b) { b.classList.remove('editando'); });
+    document.querySelectorAll('[data-bloco].editando').forEach(function (b) { b.classList.remove('editando'); });
     if (editar) bloco.classList.add('editando');
     try { history.replaceState(null, '', link.getAttribute('href')); } catch (e) {}
   });
+
+  // Seção: os dias só aparecem quando a frequência é "Só em alguns dias".
+  function ligarFrequencia(form) {
+    var dias = form.querySelector('[data-dias-secao]');
+    function atualizar() {
+      var r = form.querySelector('input[name="frequencia"]:checked');
+      dias.hidden = !(r && r.value === 'dias');
+    }
+    form.addEventListener('change', atualizar);
+    atualizar();
+  }
+  document.querySelectorAll('[data-frequencia]').forEach(ligarFrequencia);
 
   // Formulários de edição: o botão Salvar só aparece quando algo mudou.
   document.addEventListener('input', function (ev) {

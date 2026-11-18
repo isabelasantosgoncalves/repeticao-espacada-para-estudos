@@ -20,7 +20,7 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 - **Registrar sessão**: formulário rápido (matéria → assunto, data, acertos, total, observação).
 - **Mapa de domínio**: assuntos por matéria com barra colorida (vermelho < 50%, amarelo 50–84%, verde ≥ 85%), separados em *Revisar agora*, *Pode esperar* e *Dominado*.
 - **Histórico do assunto**: lista de sessões (editar/excluir) e gráfico de linha da % de acerto (Chart.js).
-- **Matérias, assuntos e subassuntos**: criar, renomear, mover e excluir. Um assunto pode ter subassuntos (ex.: Álgebra → Equações, Inequações, Sistemas lineares), e cada um tem o próprio domínio e a própria agenda.
+- **Seções, assuntos e subassuntos**: a seção agrupa o que se estuda junto (ex.: SAT Math); os assuntos aparecem em cartões lado a lado, com os subassuntos dentro. Cada seção tem seus **dias de estudo** (todo dia ou dias escolhidos) e um modo de edição próprio.
 - **Configurações**: tudo do onboarding, mais **exportar** e **importar** os dados em JSON.
 - **Instalável como app** (PWA): no Chrome/Edge aparece "Instalar Revisa" na barra de endereço; no celular, "Adicionar à tela inicial".
 - **Conta demo** com dados de exemplo (`demo@demo.com` / `demo123`).
@@ -36,9 +36,9 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 |---|---|
 | ![Mapa](docs/prints/mapa.png) | ![Histórico](docs/prints/historico.png) |
 
-| Registrar sessão | Matérias e assuntos |
+| Registrar sessão | Seções e assuntos |
 |---|---|
-| ![Registrar](docs/prints/registrar.png) | ![Matérias](docs/prints/materias.png) |
+| ![Registrar](docs/prints/registrar.png) | ![Seções](docs/prints/materias.png) |
 
 | Assunto com subassuntos | Configurações |
 |---|---|
@@ -159,9 +159,16 @@ ele já vem sugerido quando a pessoa escolhe esse ritmo.
 - A seleção do dia usa só as sessões **anteriores a hoje**, então a lista não muda enquanto você registra os resultados; o que já foi feito aparece marcado.
 - A **observação** de cada sessão é só um registro: não entra em nenhum cálculo.
 
-### 6. Subassuntos
+### 6. Dias de estudo por seção
 
-A hierarquia é **matéria → assunto → subassunto** (um nível de subassunto). Quando um assunto ganha
+Cada seção pode ser estudada todo dia ou só em alguns dias (ex.: SAT todo dia, teoria musical
+seg/qua/sex). Nos outros dias, os assuntos dela não entram na revisão. E se uma revisão cairia
+num dia sem estudo daquela seção, ela passa para o próximo dia de estudo **sem contar como atraso**,
+então o esquecimento e a prioridade não punem os dias de folga daquela seção.
+
+### 7. Subassuntos
+
+A hierarquia é **seção → assunto → subassunto** (um nível de subassunto). Quando um assunto ganha
 subassuntos, ele vira um **grupo**: as sessões são registradas nos subassuntos, e só eles entram nas
 revisões e no mapa. O domínio do grupo é a **média simples** do domínio efetivo dos subassuntos já
 estudados. Cada um pesa igual, para que um ponto fraco (ex.: inequações) não fique escondido atrás

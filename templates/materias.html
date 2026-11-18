@@ -1,31 +1,33 @@
 {% extends "base.html" %}
-{% block titulo %}Matérias e assuntos{% endblock %}
-{% block main_class %}conteudo medio{% endblock %}
+{% block titulo %}Seções e assuntos{% endblock %}
 
 {# ---------------------------------------------------------------------------
-   Cada matéria é um bloco com dois modos:
-   - normal: só os nomes (limpo para consultar);
-   - edição (botão "Editar" da matéria): renomear, mover, excluir e criar subassuntos.
+   Seções (ex.: SAT Math) são cabeçalhos de grupo; cada ASSUNTO é um cartão,
+   com os subassuntos dentro, numa grade que usa a largura da tela.
+   Cada seção tem um modo de edição (botão "Editar"): renomear, definir os dias
+   de estudo, mover/excluir assuntos e criar subassuntos.
    Os formulários levam "editando=1" para a página voltar no mesmo modo e lugar.
+   (No código e no banco a seção continua se chamando "materia".)
 --------------------------------------------------------------------------- #}
 
 {% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
-{% macro manter(m) %}<input type="hidden" name="editando" value="1"><input type="hidden" name="materia_id" value="{{ m.id }}">{% endmacro %}
 
-{% macro sessoes(a) %}{% if a.filhos %}{{ a.filhos | length }} subassunto{{ 's' if a.filhos | length > 1 }}{% else %}{{ a.n_sessoes }} sess{{ 'ão' if a.n_sessoes == 1 else 'ões' }}{% endif %}{% endmacro %}
+{% macro contagem(a) %}{% if a.filhos %}{{ a.filhos | length }} subassunto{{ 's' if a.filhos | length > 1 }}{% else %}{{ a.n_sessoes }} sess{{ 'ão' if a.n_sessoes == 1 else 'ões' }}{% endif %}{% endmacro %}
 
-{# linha em modo edição: nome editável (salva com Enter ou ✓) + excluir #}
+{% macro dias_txt(dias) %}{% if not dias %}Todo dia{% else %}{% for d in dias %}{{ NOMES_DIAS[d][:3] }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}{% endmacro %}
+
+{# linha em modo edição: nome editável (o botão Salvar aparece quando muda) + excluir #}
 {% macro linha_edicao(a, m, materias, sub=False) %}
 <div class="ed-linha">
   <form method="post" action="{{ url_for('editar_assunto', aid=a.id) }}" class="ed-form" data-sujo>
     {{ csrf() }}<input type="hidden" name="editando" value="1">
     <input type="text" name="nome" value="{{ a.nome }}" required maxlength="160" aria-label="Nome de {{ a.nome }}">
     {% if not sub and materias | length > 1 %}
-    <select name="materia_id" aria-label="Mover {{ a.nome }} para outra matéria" title="Matéria">
+    <select name="materia_id" aria-label="Mover {{ a.nome }} para outra seção" title="Seção">
       {% for m2 in materias %}<option value="{{ m2.id }}" {{ 'selected' if m2.id == m.id }}>{{ m2.nome }}</option>{% endfor %}
     </select>
     {% endif %}
-    <button class="ed-salvar" title="Salvar alteração">Salvar</button>
+    <button class="ed-salvar">Salvar</button>
   </form>
   <form method="post" action="{{ url_for('excluir_assunto', aid=a.id) }}"
         data-confirmar="Excluir “{{ a.nome }}”{% if a.filhos %} e seus {{ a.filhos | length }} subassuntos{% endif %}{% if a.n_sessoes %} ({{ a.n_sessoes }} sessões){% endif %}? Isso não pode ser desfeito.">
@@ -39,13 +41,13 @@
 <div class="cab-pagina">
   <div>
     <p class="selo">Cadastro</p>
-    <h1>Matérias e assuntos</h1>
+    <h1>Seções e assuntos</h1>
   </div>
   <details class="nova-materia-d" {{ 'open' if not materias }}>
-    <summary class="btn">+ Nova matéria</summary>
+    <summary class="btn">+ Nova seção</summary>
     <form method="post" action="{{ url_for('criar_materia') }}" class="nova-materia-form">
       {{ csrf() }}
-      <input type="text" name="nome" placeholder="Nome da matéria (ex.: SAT Math)" required maxlength="120" aria-label="Nome da nova matéria" autofocus>
+      <input type="text" name="nome" placeholder="Nome da seção (ex.: SAT Math)" required maxlength="120" aria-label="Nome da nova seção" autofocus>
       <button class="btn btn-p">Criar</button>
     </form>
   </details>
@@ -53,92 +55,105 @@
 
 {% if not materias %}
 <div class="painel vazio">
-  <h2>Comece pela primeira matéria</h2>
-  <p class="sub">Depois, dentro dela, você cria os assuntos e, se quiser, subassuntos mais específicos.<br>
-    Ex.: SAT Math → Álgebra → Equações lineares.</p>
+  <h2>Comece pela primeira seção</h2>
+  <p class="sub">Uma seção agrupa o que você estuda junto (ex.: SAT Math). Dentro dela ficam os assuntos e, se quiser,<br>
+    subassuntos mais específicos. Ex.: SAT Math → Algebra · Foundations → Linear functions.</p>
 </div>
 {% endif %}
 
 {% for m in materias %}
-{% set em_edicao = editando == m.id %}
-<section class="mt {{ 'editando' if em_edicao }}" id="materia-{{ m.id }}">
-  <header class="mt-cab">
-    <div class="mt-titulo">
+<section class="sec {{ 'editando' if editando == m.id }}" id="materia-{{ m.id }}" data-bloco>
+  <header class="sec-cab">
+    <div class="sec-titulo">
       <h2>{{ m.nome }}</h2>
-      <span class="mt-meta">{{ m.folhas | length }} assunto{{ 's' if m.folhas | length != 1 }} · {{ m.folhas | sum(attribute='n_sessoes') }} sessões</span>
+      <span class="sec-meta">{{ m.folhas | length }} assunto{{ 's' if m.folhas | length != 1 }} · {{ m.folhas | sum(attribute='n_sessoes') }} sessões</span>
+      <span class="sec-dias" title="Dias em que esta seção entra na revisão">{{ dias_txt(m.dias_estudo) }}</span>
     </div>
-    <a class="btn btn-fantasma btn-p mt-editar" href="{{ url_for('materias', editar=m.id) }}#materia-{{ m.id }}" data-alternar-edicao>Editar</a>
-    <a class="btn btn-p mt-concluir" href="{{ url_for('materias') }}#materia-{{ m.id }}" data-alternar-edicao>Concluir</a>
+    <a class="btn btn-fantasma btn-p sec-editar" href="{{ url_for('materias', editar=m.id) }}#materia-{{ m.id }}" data-alternar-edicao>Editar seção</a>
+    <a class="btn btn-p sec-concluir" href="{{ url_for('materias') }}#materia-{{ m.id }}" data-alternar-edicao>Concluir</a>
   </header>
 
-  {# -------- modo edição: nome da matéria -------- #}
-  <div class="so-edicao mt-ed-materia">
-    <form method="post" action="{{ url_for('editar_materia', mid=m.id) }}" class="ed-form" data-sujo>
-      {{ csrf() }}<input type="hidden" name="editando" value="1">
-      <label class="ed-rotulo">Nome da matéria</label>
-      <input type="text" name="nome" value="{{ m.nome }}" required maxlength="120" aria-label="Nome da matéria">
-      <button class="ed-salvar">Salvar</button>
-    </form>
-  </div>
+  {# -------- modo edição: nome e dias de estudo da seção -------- #}
+  <form method="post" action="{{ url_for('editar_materia', mid=m.id) }}" class="so-edicao sec-config" data-frequencia>
+    {{ csrf() }}<input type="hidden" name="editando" value="1">
+    <label class="sec-campo">
+      <span class="ed-rotulo">Nome da seção</span>
+      <input type="text" name="nome" value="{{ m.nome }}" required maxlength="120" aria-label="Nome da seção">
+    </label>
+    <div class="sec-campo">
+      <span class="ed-rotulo">Quando estudo esta seção</span>
+      <div class="sec-freq">
+        <label class="check"><input type="radio" name="frequencia" value="todo" {{ 'checked' if not m.dias_estudo }}> Todo dia</label>
+        <label class="check"><input type="radio" name="frequencia" value="dias" {{ 'checked' if m.dias_estudo }}> Só em alguns dias</label>
+      </div>
+      <div class="dias sec-dias-escolha" data-dias-secao>
+        {% for nome in NOMES_DIAS %}
+        <label class="dia"><input type="checkbox" name="dias_estudo" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 in m.dias_estudo }}><span>{{ nome[:3] }}</span></label>
+        {% endfor %}
+      </div>
+      <small>Nos outros dias, os assuntos desta seção não entram na revisão, e uma revisão que cairia num desses dias passa para o próximo dia de estudo, sem contar como atraso.</small>
+    </div>
+    <div class="sec-acoes">
+      <button class="btn btn-p">Salvar seção</button>
+    </div>
+  </form>
 
-  {% if m.assuntos %}
-  <ul class="mt-lista">
+  <div class="sec-grade">
     {% for a in m.assuntos %}
-    <li class="mt-item {{ 'e-grupo' if a.filhos }}" id="assunto-{{ a.id }}">
+    <article class="ac {{ 'e-grupo' if a.filhos }}" id="assunto-{{ a.id }}">
       {# normal #}
-      <div class="mt-linha so-normal">
-        <a href="{{ url_for('historico', aid=a.id) }}">{{ a.nome }}</a>
-        <span class="mt-n">{{ sessoes(a) }}</span>
+      <div class="ac-cab so-normal">
+        <a class="ac-nome" href="{{ url_for('historico', aid=a.id) }}">{{ a.nome }}</a>
+        <span class="mt-n">{{ contagem(a) }}</span>
       </div>
       {# edição #}
-      <div class="so-edicao">{{ linha_edicao(a, m, materias) }}</div>
+      <div class="so-edicao ac-ed">{{ linha_edicao(a, m, materias) }}</div>
 
       {% if a.filhos %}
-      <ul class="mt-sub">
+      <ul class="ac-sub">
         {% for f in a.filhos %}
         <li>
           <div class="mt-linha so-normal">
             <a href="{{ url_for('historico', aid=f.id) }}">{{ f.nome }}</a>
-            <span class="mt-n">{{ sessoes(f) }}</span>
+            <span class="mt-n">{{ contagem(f) }}</span>
           </div>
           <div class="so-edicao">{{ linha_edicao(f, m, materias, sub=True) }}</div>
         </li>
         {% endfor %}
       </ul>
+      {% elif not a.n_sessoes %}
+      <p class="ac-vazio so-normal">Ainda não estudado.</p>
       {% endif %}
 
       {# edição: criar subassunto #}
-      <form method="post" action="{{ url_for('criar_assunto') }}" class="so-edicao ed-novo ed-novo-sub"
+      <form method="post" action="{{ url_for('criar_assunto') }}" class="so-edicao ed-novo"
             {% if a.n_sessoes and not a.filhos %}data-confirmar="“{{ a.nome }}” já tem {{ a.n_sessoes }} sessões. Elas ficam no histórico, mas as revisões passam a ser feitas nos subassuntos. Continuar?"{% endif %}>
-        {{ csrf() }}{{ manter(m) }}
+        {{ csrf() }}<input type="hidden" name="editando" value="1"><input type="hidden" name="materia_id" value="{{ m.id }}">
         <input type="hidden" name="parent_id" value="{{ a.id }}">
-        <input type="text" name="nome" placeholder="+ subassunto de {{ a.nome }}" required maxlength="160" aria-label="Novo subassunto de {{ a.nome }}">
+        <input type="text" name="nome" placeholder="+ subassunto" required maxlength="160" aria-label="Novo subassunto de {{ a.nome }}">
         <button class="ed-salvar">Adicionar</button>
       </form>
-    </li>
+    </article>
     {% endfor %}
-  </ul>
-  {% else %}
-  <p class="nada mt-vazio">Nenhum assunto ainda.</p>
-  {% endif %}
 
-  {# adicionar assunto (nos dois modos) #}
-  <details class="mt-add" {{ 'open' if not m.assuntos }}>
-    <summary>+ Adicionar assunto</summary>
-    <form method="post" action="{{ url_for('criar_assunto') }}" class="nova-materia-form">
-      {{ csrf() }}
-      <input type="hidden" name="materia_id" value="{{ m.id }}">
-      {% if em_edicao %}<input type="hidden" name="editando" value="1">{% endif %}
-      <input type="text" name="nome" placeholder="Nome do assunto (ex.: Álgebra)" required maxlength="160" aria-label="Nome do novo assunto em {{ m.nome }}">
-      <button class="btn btn-p">Adicionar</button>
-    </form>
-  </details>
+    {# novo assunto: cartão tracejado no fim da grade #}
+    <details class="ac ac-novo" {{ 'open' if not m.assuntos }}>
+      <summary>+ Novo assunto</summary>
+      <form method="post" action="{{ url_for('criar_assunto') }}" class="ac-novo-form">
+        {{ csrf() }}
+        <input type="hidden" name="materia_id" value="{{ m.id }}">
+        {% if editando == m.id %}<input type="hidden" name="editando" value="1">{% endif %}
+        <input type="text" name="nome" placeholder="Ex.: Algebra · Foundations" required maxlength="160" aria-label="Nome do novo assunto em {{ m.nome }}">
+        <button class="btn btn-p">Adicionar</button>
+      </form>
+    </details>
+  </div>
 
-  {# edição: excluir a matéria inteira #}
-  <form method="post" action="{{ url_for('excluir_materia', mid=m.id) }}" class="so-edicao mt-excluir"
-        data-confirmar="Excluir a matéria “{{ m.nome }}” com todos os assuntos e sessões? Isso não pode ser desfeito.">
+  {# edição: excluir a seção inteira #}
+  <form method="post" action="{{ url_for('excluir_materia', mid=m.id) }}" class="so-edicao sec-excluir"
+        data-confirmar="Excluir a seção “{{ m.nome }}” com todos os assuntos e sessões? Isso não pode ser desfeito.">
     {{ csrf() }}
-    <button class="link-p perigo">Excluir a matéria “{{ m.nome }}”</button>
+    <button class="link-p perigo">Excluir a seção “{{ m.nome }}”</button>
   </form>
 </section>
 {% endfor %}

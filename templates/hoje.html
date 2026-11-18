@@ -10,9 +10,9 @@
 
 {% if not tem_assuntos %}
 <div class="vazio painel">
-  <h2>Comece pelas matérias</h2>
-  <p>Cadastre suas matérias e os assuntos de cada uma. Depois é só voltar aqui.</p>
-  <a class="btn" href="{{ url_for('materias') }}">Cadastrar matérias</a>
+  <h2>Comece pelas seções</h2>
+  <p>Cadastre suas seções (ex.: SAT Math) e os assuntos de cada uma. Depois é só voltar aqui.</p>
+  <a class="btn" href="{{ url_for('materias') }}">Cadastrar seções</a>
 </div>
 {% else %}
 
@@ -55,6 +55,7 @@
           {% else %}Sem revisão hoje.{% if proximo_fixo %} A próxima revisão grande é {{ NOMES_DIAS[proximo_fixo.weekday()] | lower }}, {{ proximo_fixo | br }}.{% endif %}
           {% endif %}
           {% if revisao %}Digite os acertos e aperte Enter para registrar.{% endif %}
+          {% if pausadas %}<span class="pausadas">Hoje não é dia de: {{ pausadas | join(', ') }}.</span>{% endif %}
         </p>
       </div>
     </div>

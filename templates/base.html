@@ -28,7 +28,7 @@
         <a href="{{ url_for('hoje') }}" class="{{ 'ativo' if pagina == 'hoje' }}">Hoje</a>
         <a href="{{ url_for('nova_sessao') }}" class="{{ 'ativo' if pagina in ('nova_sessao', 'editar_sessao') }}">Registrar</a>
         <a href="{{ url_for('mapa') }}" class="{{ 'ativo' if pagina in ('mapa', 'historico') }}">Mapa</a>
-        <a href="{{ url_for('materias') }}" class="{{ 'ativo' if pagina == 'materias' }}">Matérias</a>
+        <a href="{{ url_for('materias') }}" class="{{ 'ativo' if pagina == 'materias' }}">Seções</a>
         <a href="{{ url_for('configuracoes') }}" class="{{ 'ativo' if pagina == 'configuracoes' }}">Configurações</a>
       </nav>
       {% endif %}

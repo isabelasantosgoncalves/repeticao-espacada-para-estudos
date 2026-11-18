@@ -167,6 +167,34 @@ class TestApp(unittest.TestCase):
         self.post("/assuntos/novo", {"nome": "Algebra", "materia_id": "1"}, "/materias")
         self.assertIn("vence hoje ou está atrasado", self.c.get("/hoje").get_data(as_text=True))
 
+    def test_dias_de_estudo_da_secao(self):
+        from datetime import date, timedelta
+        hoje = date.today()
+        self.criar_usuario("d@d.com")
+        self.post("/configuracoes", {"ritmo": "leve", "aprendizado": "padrao", "teto_dias": "45",
+                                     "modo": "completa", "revisao_minima": "2", "questoes_modo": "auto",
+                                     "questoes_fixas": "10"}, "/configuracoes")
+        self.post("/materias/nova", {"nome": "Música"}, "/materias")
+        self.post("/assuntos/novo", {"nome": "Intervalos", "materia_id": "1"}, "/materias")
+        # sessão ruim há 10 dias: vencida, entraria na revisão de hoje
+        self.post("/sessoes/nova", {"assunto_id": "1", "data": (hoje - timedelta(days=10)).isoformat(),
+                                    "acertos": "2", "total": "10"}, "/sessoes/nova")
+        self.assertIn("Intervalos", self.c.get("/hoje").get_data(as_text=True).split("Próximos 7 dias")[0])
+        # a seção passa a ser estudada só em um dia que não é hoje
+        outro_dia = str((hoje.weekday() + 1) % 7)
+        self.post("/materias/1/editar", {"nome": "Música", "frequencia": "dias", "dias_estudo": outro_dia},
+                  "/materias")
+        html = self.c.get("/hoje").get_data(as_text=True)
+        self.assertIn("Hoje não é dia de: Música", html)
+        self.assertNotIn("Intervalos", html.split("Próximos 7 dias")[0])
+        # exportar leva os dias da seção
+        self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["materias"][0]["dias_estudo"],
+                         [int(outro_dia)])
+        # "só em alguns dias" sem nenhum dia marcado é recusado
+        self.post("/materias/1/editar", {"nome": "Música", "frequencia": "dias"}, "/materias")
+        self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["materias"][0]["dias_estudo"],
+                         [int(outro_dia)])
+
     def test_pwa(self):
         r = self.c.get("/manifest.webmanifest")
         self.assertEqual(r.status_code, 200)

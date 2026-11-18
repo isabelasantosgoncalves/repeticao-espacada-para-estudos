@@ -26,10 +26,13 @@ CREATE TABLE IF NOT EXISTS configuracoes (
     teto_dias       INTEGER NOT NULL DEFAULT 45         -- máximo de dias sem revisar um assunto
 );
 
+-- "Seções" na interface (ex.: SAT Math). dias_estudo vazio = todo dia;
+-- senão, dias da semana em que a seção é estudada (ex.: '0,2,4' = seg/qua/sex).
 CREATE TABLE IF NOT EXISTS materias (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
-    nome        TEXT    NOT NULL
+    nome        TEXT    NOT NULL,
+    dias_estudo TEXT    NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS assuntos (
@@ -94,6 +97,9 @@ def iniciar_db(caminho: str):
     if "parent_id" not in colunas:
         con.execute("ALTER TABLE assuntos ADD COLUMN parent_id INTEGER REFERENCES assuntos(id) ON DELETE CASCADE")
     con.execute("CREATE INDEX IF NOT EXISTS ix_assuntos_pai ON assuntos(parent_id)")
+    # Migração: dias de estudo por seção
+    if "dias_estudo" not in [r["name"] for r in con.execute("PRAGMA table_info(materias)")]:
+        con.execute("ALTER TABLE materias ADD COLUMN dias_estudo TEXT NOT NULL DEFAULT ''")
     # Migração: ritmo de estudo
     colunas = [r["name"] for r in con.execute("PRAGMA table_info(configuracoes)")]
     if "ritmo" not in colunas:

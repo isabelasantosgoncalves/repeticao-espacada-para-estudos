@@ -29,6 +29,18 @@ def para_data(texto: str) -> date:
     return date.fromisoformat(texto)
 
 
+def ler_dias(texto: str | None) -> list[int]:
+    """'0,2,4' -> [0, 2, 4]. Vazio -> [] (todo dia)."""
+    return sorted({int(d) for d in (texto or "").split(",") if d.strip().isdigit() and 0 <= int(d) <= 6})
+
+
+def dias_por_assunto(db, uid: int) -> dict[int, list[int]]:
+    """Dias de estudo da seção de cada assunto ([] = todo dia)."""
+    return {r["id"]: ler_dias(r["dias_estudo"]) for r in db.execute(
+        """SELECT a.id, m.dias_estudo FROM assuntos a JOIN materias m ON m.id = a.materia_id
+           WHERE a.usuario_id = ?""", (uid,))}
+
+
 # ---------------------------------------------------------------------------
 # Configurações
 # ---------------------------------------------------------------------------
@@ -71,6 +83,7 @@ def listar_assuntos(db, uid: int) -> list[dict]:
     """
     rows = db.execute(
         """SELECT a.id, a.nome, a.materia_id, a.parent_id, m.nome AS materia, p.nome AS pai,
+                  m.dias_estudo AS dias_materia,
                   (SELECT COUNT(*) FROM assuntos f WHERE f.parent_id = a.id) AS n_filhos
            FROM assuntos a
            JOIN materias m ON m.id = a.materia_id
@@ -85,6 +98,7 @@ def listar_assuntos(db, uid: int) -> list[dict]:
         a = dict(r)
         a["rotulo"] = f"{a['pai']} › {a['nome']}" if a["pai"] else a["nome"]
         a["grupo"] = a["n_filhos"] > 0
+        a["dias_materia"] = ler_dias(a["dias_materia"])
         res.append(a)
     # Ordem alfabética ignorando acentos (o SQLite poria "Álgebra" depois de "Z")
     res.sort(key=lambda a: (chave_ordem(a["materia"]), chave_ordem(a["pai"] or a["nome"]),
@@ -121,12 +135,13 @@ def estados(db, uid: int, dia: date, cfg: dict, antes_de: date | None = None,
             ids: set[int] | None = None) -> dict[int, L.EstadoAssunto]:
     """Estado de cada assunto que já tem sessões (só os de `ids`, se informado)."""
     fixas = questoes_fixas(cfg)
+    dias = dias_por_assunto(db, uid)
     res = {}
     for aid, sess in sessoes_por_assunto(db, uid, antes_de).items():
         if ids is not None and aid not in ids:
             continue
         e = L.analisar_assunto(aid, sess, dia, fixas, fator=fator(cfg), tetos=tetos(cfg),
-                               teto=cfg.get("teto_dias"))
+                               teto=cfg.get("teto_dias"), dias_estudo=dias.get(aid))
         if e:
             res[aid] = e
     return res
@@ -161,6 +176,10 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
            GROUP BY assunto_id HAVING MIN(data) = ?""", (uid, ontem)):
         if r["assunto_id"] not in ids_ontem:
             ids_ontem.append(r["assunto_id"])
+
+    # Seções que não são estudadas hoje ficam fora da revisão do dia.
+    pausadas = {a["materia"] for a in assuntos.values() if not L.estuda_no_dia(dia, a["dias_materia"])}
+    est = {aid: e for aid, e in est.items() if L.estuda_no_dia(dia, assuntos[aid]["dias_materia"])}
 
     if tipo == "grande":
         selecao = L.selecionar_revisao_grande(list(est.values()), dia, proximo_fixo)
@@ -218,6 +237,7 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
         "extras": extras,
         "fixas": questoes_fixas(cfg),
         "tem_assuntos": bool(assuntos),
+        "pausadas": sorted(pausadas, key=chave_ordem),
     }
 
 
@@ -256,7 +276,7 @@ def exportar(db, uid: int) -> dict:
             """SELECT data, acertos, total, observacao FROM sessoes
                WHERE usuario_id = ? AND assunto_id = ? ORDER BY data, id""", (uid, aid))]
 
-    for m in db.execute("SELECT id, nome FROM materias WHERE usuario_id = ? ORDER BY id", (uid,)):
+    for m in db.execute("SELECT id, nome, dias_estudo FROM materias WHERE usuario_id = ? ORDER BY id", (uid,)):
         assuntos = []
         for a in db.execute(
                 """SELECT id, nome FROM assuntos
@@ -269,7 +289,7 @@ def exportar(db, uid: int) -> dict:
             if subs:
                 item["subassuntos"] = subs
             assuntos.append(item)
-        materias.append({"nome": m["nome"], "assuntos": assuntos})
+        materias.append({"nome": m["nome"], "dias_estudo": ler_dias(m["dias_estudo"]), "assuntos": assuntos})
     return {
         "app": "revisa",
         "versao": 1,
@@ -317,7 +337,7 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
     for m in dados["materias"]:
         nome_m = str(m.get("nome", "")).strip()[:120]
         if not nome_m:
-            raise ErroImportacao("Matéria sem nome no arquivo.")
+            raise ErroImportacao("Seção sem nome no arquivo.")
         assuntos = []
         for a in m.get("assuntos", []) or []:
             nome_a = str(a.get("nome", "")).strip()[:160]
@@ -330,7 +350,8 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
                     raise ErroImportacao(f"Subassunto sem nome em {nome_a}.")
                 subs.append((nome_s, [_validar_sessao(x) for x in s.get("sessoes", []) or []]))
             assuntos.append((nome_a, [_validar_sessao(s) for s in a.get("sessoes", []) or []], subs))
-        plano.append((nome_m, assuntos))
+        dias_m = ",".join(map(str, ler_dias(",".join(map(str, m.get("dias_estudo") or [])))))
+        plano.append((nome_m, assuntos, dias_m))
 
     cfg_nova = dados.get("configuracoes") or {}
 
@@ -341,9 +362,9 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
             db.execute("DELETE FROM assuntos WHERE usuario_id = ?", (uid,))
             db.execute("DELETE FROM materias WHERE usuario_id = ?", (uid,))
         n_m = n_a = n_s = 0
-        for nome_m, assuntos in plano:
-            mid = db.execute("INSERT INTO materias (usuario_id, nome) VALUES (?, ?)",
-                             (uid, nome_m)).lastrowid
+        for nome_m, assuntos, dias_m in plano:
+            mid = db.execute("INSERT INTO materias (usuario_id, nome, dias_estudo) VALUES (?, ?, ?)",
+                             (uid, nome_m, dias_m)).lastrowid
             n_m += 1
             def gravar(nome, sessoes, pai=None):
                 nonlocal n_a, n_s

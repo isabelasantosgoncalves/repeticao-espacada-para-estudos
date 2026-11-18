@@ -396,6 +396,29 @@ class TestSelecaoCompleta(unittest.TestCase):
         self.assertEqual([e.assunto_id for e in sel], [1, 4, 2])
 
 
+class TestDiasDaSecao(unittest.TestCase):
+    # HOJE (10/03/2026) é terça (1). Seção estudada seg/qua/sex = [0, 2, 4].
+    SQS = [0, 2, 4]
+
+    def test_estuda_no_dia(self):
+        self.assertTrue(L.estuda_no_dia(HOJE, []))
+        self.assertFalse(L.estuda_no_dia(HOJE, self.SQS))
+        self.assertTrue(L.estuda_no_dia(HOJE + timedelta(days=1), self.SQS))
+
+    def test_revisao_passa_para_o_proximo_dia_de_estudo(self):
+        self.assertEqual(L.ajustar_para_dia_de_estudo(HOJE, self.SQS), HOJE + timedelta(days=1))
+        self.assertEqual(L.ajustar_para_dia_de_estudo(HOJE, []), HOJE)
+
+    def test_dia_sem_estudo_nao_conta_como_atraso(self):
+        # 50% há 4 dias -> revisão "hoje" (terça); com seg/qua/sex vai para quarta
+        d = HOJE - timedelta(days=4)
+        livre = L.analisar_assunto(1, [(d, 5, 10)], HOJE)
+        secao = L.analisar_assunto(1, [(d, 5, 10)], HOJE + timedelta(days=1), dias_estudo=self.SQS)
+        self.assertEqual(livre.proxima_revisao, HOJE)
+        self.assertEqual(secao.proxima_revisao, HOJE + timedelta(days=1))
+        self.assertEqual(secao.atraso, 0)
+
+
 class TestMapa(unittest.TestCase):
     def test_classificacao(self):
         self.assertEqual(L.classificar_para_mapa(estado(1, 0.9, 0.1, HOJE), HOJE), "agora")

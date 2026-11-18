@@ -200,7 +200,9 @@ def materias_com_assuntos(uid: int) -> list[dict]:
     """
     db = banco.get_db()
     materias = sorted((dict(m) for m in db.execute(
-        "SELECT id, nome FROM materias WHERE usuario_id = ?", (uid,))), key=lambda m: S.chave_ordem(m["nome"]))
+        "SELECT id, nome, dias_estudo FROM materias WHERE usuario_id = ?", (uid,))), key=lambda m: S.chave_ordem(m["nome"]))
+    for m in materias:
+        m["dias_estudo"] = S.ler_dias(m["dias_estudo"])
     por_materia: dict[int, list] = {m["id"]: [] for m in materias}
     contagem = {r["assunto_id"]: r["n"] for r in db.execute(
         "SELECT assunto_id, COUNT(*) AS n FROM sessoes WHERE usuario_id = ? GROUP BY assunto_id", (uid,))}
@@ -378,7 +380,7 @@ def registrar_rotas(app: Flask):
                 return render_template("onboarding.html", cfg=cfg)
             db.execute("UPDATE usuarios SET onboarding_ok = 1 WHERE id = ?", (current_user.id,))
             db.commit()
-            flash("Tudo pronto! Comece cadastrando suas matérias e assuntos.", "ok")
+            flash("Tudo pronto! Comece cadastrando suas seções e assuntos.", "ok")
             return redirect(url_for("materias"))
         return render_template("onboarding.html", cfg=cfg)
 
@@ -518,7 +520,7 @@ def registrar_rotas(app: Flask):
         estado = L.analisar_assunto(
             aid, [(date.fromisoformat(s["data"]), s["acertos"], s["total"]) for s in sessoes],
             S.hoje(), S.questoes_fixas(cfg), fator=S.fator(cfg), tetos=S.tetos(cfg),
-            teto=cfg.get("teto_dias"))
+            teto=cfg.get("teto_dias"), dias_estudo=S.dias_por_assunto(db, current_user.id).get(aid))
         grafico = {"labels": [br(s["data"]) for s in sessoes],
                    "valores": [round(s["pct"] * 100, 1) for s in sessoes]}
 
@@ -571,20 +573,27 @@ def registrar_rotas(app: Flask):
     @login_required
     def criar_materia():
         def acao():
-            nome = nome_valido(request.form.get("nome"), "da matéria", 120)
+            nome = nome_valido(request.form.get("nome"), "da seção", 120)
             return banco.get_db().execute("INSERT INTO materias (usuario_id, nome) VALUES (?, ?)",
                                           (current_user.id, nome)).lastrowid
-        return executar(acao, "Matéria criada.")
+        return executar(acao, "Seção criada.")
 
     @app.route("/materias/<int:mid>/editar", methods=["POST"])
     @login_required
     def editar_materia(mid):
         do_usuario("materias", mid)
         def acao():
-            nome = nome_valido(request.form.get("nome"), "da matéria", 120)
-            banco.get_db().execute("UPDATE materias SET nome = ? WHERE id = ? AND usuario_id = ?",
-                                   (nome, mid, current_user.id))
-        return executar(acao, "Matéria renomeada.", mid)
+            nome = nome_valido(request.form.get("nome"), "da seção", 120)
+            # "Quando estudo esta seção": todo dia (vazio) ou dias escolhidos
+            dias = ""
+            if request.form.get("frequencia") == "dias":
+                dias = ",".join(map(str, S.ler_dias(",".join(request.form.getlist("dias_estudo")))))
+                if not dias:
+                    raise ValueError("Escolha pelo menos um dia de estudo para a seção.")
+            banco.get_db().execute(
+                "UPDATE materias SET nome = ?, dias_estudo = ? WHERE id = ? AND usuario_id = ?",
+                (nome, dias, mid, current_user.id))
+        return executar(acao, "Seção atualizada.", mid)
 
     @app.route("/materias/<int:mid>/excluir", methods=["POST"])
     @login_required
@@ -592,7 +601,7 @@ def registrar_rotas(app: Flask):
         do_usuario("materias", mid)
         def acao():
             banco.get_db().execute("DELETE FROM materias WHERE id = ? AND usuario_id = ?", (mid, current_user.id))
-        return executar(acao, "Matéria excluída, com seus assuntos e sessões.")
+        return executar(acao, "Seção excluída, com seus assuntos e sessões.")
 
     @app.route("/assuntos/novo", methods=["POST"])
     @login_required
@@ -608,7 +617,7 @@ def registrar_rotas(app: Flask):
                     raise ValueError("Subassuntos não podem ter outros subassuntos.")
                 mid = pai["materia_id"]
             else:
-                mid = ler_inteiro(request.form.get("materia_id"), "matéria")
+                mid = ler_inteiro(request.form.get("materia_id"), "seção")
                 do_usuario("materias", mid)
             banco.get_db().execute(
                 "INSERT INTO assuntos (usuario_id, materia_id, nome, parent_id) VALUES (?, ?, ?, ?)",
@@ -691,7 +700,7 @@ def registrar_rotas(app: Flask):
         except (S.ErroImportacao, ValueError) as e:
             flash(f"Importação cancelada: {e}", "erro")
         else:
-            flash(f"Importado: {r['materias']} matérias, {r['assuntos']} assuntos e {r['sessoes']} sessões.", "ok")
+            flash(f"Importado: {r['materias']} seções, {r['assuntos']} assuntos e {r['sessoes']} sessões.", "ok")
         return redirect(url_for("configuracoes"))
 
 

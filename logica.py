@@ -286,6 +286,7 @@ def analisar_assunto(
     fator: float = 1.0,
     tetos: tuple[int, ...] = TETOS_APRENDIZADO,
     teto: int | None = None,
+    dias_estudo: list[int] | None = None,
 ) -> EstadoAssunto | None:
     """
     Calcula o estado de um assunto a partir das suas sessões.
@@ -301,7 +302,8 @@ def analisar_assunto(
     dom = dominio(pcts, totais)
     intervalo, sequencia = calcular_intervalo(pcts, totais, questoes_fixas, tetos=tetos, fator=fator, teto=teto)
     ultima_data = sessoes[-1][0]
-    proxima = ultima_data + timedelta(days=intervalo)
+    # Revisão que cairia num dia sem estudo daquela seção vai para o próximo dia de estudo.
+    proxima = ajustar_para_dia_de_estudo(ultima_data + timedelta(days=intervalo), dias_estudo)
     atraso = dias_de_atraso(proxima, hoje)
     dom_ef = dominio_efetivo(dom, atraso)
 
@@ -333,6 +335,24 @@ def analisar_assunto(
 MODOS = ("fixa", "diaria", "ambos", "completa")
 MODOS_COM_DIA_FIXO = ("fixa", "ambos")
 MODOS_COM_MINIMA = ("diaria", "ambos")
+
+
+def estuda_no_dia(dia: date, dias_estudo: list[int] | None) -> bool:
+    """A seção é estudada neste dia? Lista vazia/None = todo dia."""
+    return not dias_estudo or dia.weekday() in dias_estudo
+
+
+def ajustar_para_dia_de_estudo(d: date, dias_estudo: list[int] | None) -> date:
+    """
+    Se a revisão cai num dia em que a seção não é estudada, ela passa para o
+    próximo dia de estudo. Assim esses dias não contam como atraso.
+    """
+    if not dias_estudo:
+        return d
+    for i in range(7):
+        if (d + timedelta(days=i)).weekday() in dias_estudo:
+            return d + timedelta(days=i)
+    return d
 
 
 def proximo_dia_fixo(hoje: date, dias_fixos: list[int]) -> date | None:

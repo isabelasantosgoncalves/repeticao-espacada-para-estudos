@@ -9,7 +9,7 @@
   {% if not materias or not (materias | map(attribute='folhas') | select | list) %}
   <div class="vazio">
     <p>Você ainda não tem assuntos cadastrados.</p>
-    <a class="btn" href="{{ url_for('materias') }}">Cadastrar matérias e assuntos</a>
+    <a class="btn" href="{{ url_for('materias') }}">Cadastrar seções e assuntos</a>
   </div>
   {% else %}
   {% set atual = namespace(materia=None) %}
@@ -17,7 +17,7 @@
   <form method="post" class="form" data-validar-resultados>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="grade-2">
-      <label>Matéria
+      <label>Seção
         <select id="sel-materia" required>
           <option value="">Escolha…</option>
           {% for m in materias if m.folhas %}
@@ -27,7 +27,7 @@
       </label>
       <label>Assunto
         <select name="assunto_id" id="sel-assunto" required data-valor="{{ v.assunto_id or '' }}">
-          <option value="">Escolha a matéria primeiro</option>
+          <option value="">Escolha a seção primeiro</option>
         </select>
       </label>
     </div>
