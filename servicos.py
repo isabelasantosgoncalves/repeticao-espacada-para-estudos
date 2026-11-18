@@ -151,18 +151,13 @@ def estados(db, uid: int, dia: date, cfg: dict, antes_de: date | None = None,
 # Tela "Hoje"
 # ---------------------------------------------------------------------------
 
-def montar_hoje(db, uid: int, dia: date) -> dict:
+def selecao_do_dia(db, uid: int, dia: date, cfg: dict, assuntos: dict) -> dict:
     """
-    Monta o painel da tela Hoje.
-
-    A seleção da revisão usa só as sessões ANTERIORES a hoje, para que a lista
-    não mude enquanto o usuário registra resultados ao longo do dia. Os
-    assuntos já feitos hoje aparecem marcados como concluídos.
+    Lista de revisão de um dia, com as mesmas regras da tela Hoje.
+    Usa só as práticas ANTERIORES ao dia: para hoje, a lista não muda enquanto
+    o usuário registra resultados; para amanhã, já conta o que foi feito hoje.
     """
-    cfg = carregar_config(db, uid)
-    assuntos = {a["id"]: a for a in listar_folhas(db, uid)}   # grupos não entram na revisão
     est = estados(db, uid, dia, cfg, antes_de=dia, ids=set(assuntos))
-
     tipo = L.tipo_de_revisao(cfg["modo"], cfg["dias_fixos"], dia)
     proximo_fixo = L.proximo_dia_fixo(dia, cfg["dias_fixos"])
 
@@ -170,14 +165,14 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     ids_ontem = [r["assunto_id"] for r in db.execute(
         "SELECT assunto_id FROM estudo_do_dia WHERE usuario_id = ? AND data = ? ORDER BY id",
         (uid, ontem))]
-    # Também conta como "estudado ontem" o assunto cuja primeira sessão foi ontem.
+    # Também conta como "estudado ontem" o assunto cuja primeira prática foi ontem.
     for r in db.execute(
         """SELECT assunto_id FROM sessoes WHERE usuario_id = ?
            GROUP BY assunto_id HAVING MIN(data) = ?""", (uid, ontem)):
         if r["assunto_id"] not in ids_ontem:
             ids_ontem.append(r["assunto_id"])
 
-    # Seções que não são estudadas hoje ficam fora da revisão do dia.
+    # Seções que não são estudadas no dia ficam fora da revisão.
     pausadas = {a["materia"] for a in assuntos.values() if not L.estuda_no_dia(dia, a["dias_materia"])}
     est = {aid: e for aid, e in est.items() if L.estuda_no_dia(dia, assuntos[aid]["dias_materia"])}
 
@@ -195,6 +190,36 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     if tipo and not selecao and cfg.get("adiantar", 1) > 0:
         selecao = L.selecionar_adiantadas(list(est.values()), dia, cfg["adiantar"])
         adiantadas = {e.assunto_id for e in selecao}
+
+    return {"tipo": tipo, "proximo_fixo": proximo_fixo, "selecao": [e for e in selecao if e.assunto_id in assuntos],
+            "adiantadas": adiantadas, "pausadas": pausadas}
+
+
+def montar_hoje(db, uid: int, dia: date) -> dict:
+    """
+    Monta o painel da tela Hoje (e a prévia de amanhã).
+
+    A seleção da revisão usa só as sessões ANTERIORES a hoje, para que a lista
+    não mude enquanto o usuário registra resultados ao longo do dia. Os
+    assuntos já feitos hoje aparecem marcados como concluídos.
+    """
+    cfg = carregar_config(db, uid)
+    assuntos = {a["id"]: a for a in listar_folhas(db, uid)}   # grupos não entram na revisão
+    sel = selecao_do_dia(db, uid, dia, cfg, assuntos)
+    tipo, proximo_fixo, selecao = sel["tipo"], sel["proximo_fixo"], sel["selecao"]
+    adiantadas, pausadas = sel["adiantadas"], sel["pausadas"]
+
+    # Prévia de amanhã: mesmas regras, já contando as práticas de hoje.
+    amanha_dia = dia + timedelta(days=1)
+    sel_am = selecao_do_dia(db, uid, amanha_dia, cfg, assuntos)
+    amanha = {
+        "data": amanha_dia,
+        "tipo": sel_am["tipo"],
+        "itens": [{"assunto": assuntos[e.assunto_id], "estado": e,
+                   "adiantado": e.assunto_id in sel_am["adiantadas"]} for e in sel_am["selecao"]],
+        "questoes": sum(e.questoes for e in sel_am["selecao"]),
+        "pausadas": sorted(sel_am["pausadas"], key=chave_ordem),
+    }
 
     # Sessões já registradas hoje
     feitas_hoje: dict[int, list] = defaultdict(list)
@@ -246,6 +271,7 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
         "tem_assuntos": bool(assuntos),
         "pausadas": sorted(pausadas, key=chave_ordem),
         "n_adiantadas": len(adiantadas),
+        "amanha": amanha,
     }
 
 

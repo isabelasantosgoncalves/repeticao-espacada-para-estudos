@@ -180,14 +180,14 @@ class TestApp(unittest.TestCase):
         # sessão ruim há 10 dias: vencida, entraria na revisão de hoje
         self.post("/sessoes/nova", {"assunto_id": "1", "data": (hoje - timedelta(days=10)).isoformat(),
                                     "acertos": "2", "total": "10"}, "/sessoes/nova")
-        self.assertIn("Intervalos", self.c.get("/hoje").get_data(as_text=True).split("Próximos 7 dias")[0])
+        self.assertIn("Intervalos", self.c.get("/hoje").get_data(as_text=True).split('<aside class="lateral">')[0])
         # a seção passa a ser estudada só em um dia que não é hoje
         outro_dia = str((hoje.weekday() + 1) % 7)
         self.post("/materias/1/editar", {"nome": "Música", "frequencia": "dias", "dias_estudo": outro_dia},
                   "/materias")
         html = self.c.get("/hoje").get_data(as_text=True)
         self.assertIn("Hoje não é dia de: Música", html)
-        self.assertNotIn("Intervalos", html.split("Próximos 7 dias")[0])
+        self.assertNotIn("Intervalos", html.split('<aside class="lateral">')[0])
         # exportar leva os dias da seção
         self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["materias"][0]["dias_estudo"],
                          [int(outro_dia)])
@@ -220,6 +220,26 @@ class TestApp(unittest.TestCase):
         self.assertIn("Algebra", mapa)
         self.assertNotIn("Geometria", mapa)
         self.assertIn("1 assunto ainda não começado", mapa)
+
+    def test_previa_de_amanha(self):
+        hoje = S.hoje()
+        self.criar_usuario("am@am.com")
+        self.post("/configuracoes", {"ritmo": "leve", "aprendizado": "degraus", "teto_dias": "30",
+                                     "modo": "diaria", "revisao_minima": "2", "questoes_modo": "auto",
+                                     "questoes_fixas": "10", "adiantar": "0"}, "/configuracoes")
+        self.post("/materias/nova", {"nome": "SAT"}, "/materias")
+        for nome in ("Alfa", "Beta", "Gama"):
+            self.post("/assuntos/novo", {"nome": nome, "materia_id": "1"}, "/materias")
+        # três assuntos começados hoje: 100%, 40%, 60%
+        for aid, ac in (("1", "10"), ("2", "4"), ("3", "6")):
+            self.post("/sessoes/nova", {"assunto_id": aid, "data": hoje.isoformat(),
+                                        "acertos": ac, "total": "10"}, "/sessoes/nova")
+        html = self.c.get("/hoje").get_data(as_text=True)
+        amanha = html.split('class="bloco amanha"')[1].split("</section>")[0]
+        self.assertIn("Beta", amanha)      # 40%
+        self.assertIn("Gama", amanha)      # 60%
+        self.assertNotIn("Alfa", amanha)   # 100%: não cabe no limite de 2
+        self.assertIn("Vencimentos", html)
 
     def test_pwa(self):
         r = self.c.get("/manifest.webmanifest")

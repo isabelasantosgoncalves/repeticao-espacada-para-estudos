@@ -61,7 +61,7 @@
     <small>{% if estado.dominio_efetivo < estado.dominio %}era {{ estado.dominio | pct }} antes do atraso{% else %}média das últimas 3{% endif %}</small>
   </div>
   <div class="stat">
-    <span>Próxima revisão</span>
+    <span>Vence em</span>
     <b class="{{ 'txt-vermelho' if estado.atraso }}">{{ estado.proxima_revisao | br }}</b>
     <small>{{ estado.proxima_revisao | relativo }} · intervalo de {{ estado.intervalo }} dias</small>
     {% if estado.em_aprendizado %}<small class="tag tag-leve fase">fase de aprendizado · prática {{ estado.n_sessoes }} de {{ estado.fase_total }}</small>{% endif %}

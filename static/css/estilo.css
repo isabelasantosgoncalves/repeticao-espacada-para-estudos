@@ -564,3 +564,19 @@ button.mr.on span { color: var(--acento); font-weight: 600; }
   .mapa-lista .lista-mapa li { grid-template-columns: 1fr auto; }
   .mapa-lista .status { order: 4; justify-self: start; }
 }
+
+/* cartão "Amanhã" */
+.lateral { gap: 18px; }
+.lateral > .bloco { height: auto; }
+.lateral > .bloco:last-child { flex: 1; }
+.amanha { border-left: 4px solid var(--latao); }
+.amanha-cab { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.amanha-cab .lat-tit { margin-bottom: 4px; }
+.amanha-data { font-family: var(--mono); font-size: .76rem; color: var(--texto-3); }
+.amanha-tipo { margin: 0 0 10px; font-size: .84rem; color: var(--texto-2); }
+.amanha-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.amanha-lista li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; font-size: .88rem; }
+.amanha-lista .ponto { margin: 0; }
+.amanha-lista small { font-family: var(--mono); font-size: .74rem; }
+.lat-sub { font-family: var(--mono); font-size: .7rem; font-weight: 400; color: var(--texto-3); text-transform: uppercase; letter-spacing: .06em; margin-left: 6px; }
+.lm-data { font-size: .8rem; }

@@ -410,12 +410,15 @@ def selecionar_revisao_diaria(
     escolhidos: list[EstadoAssunto] = []
     usados: set[int] = set()
 
-    for aid in ids_estudados_ontem:
+    # Se mais assuntos foram estudados ontem do que cabem no dia, entram
+    # primeiro os de menor domínio (os que mais precisam).
+    de_ontem = sorted({por_id[a].assunto_id: por_id[a] for a in ids_estudados_ontem if a in por_id}.values(),
+                      key=lambda e: (e.dominio_efetivo, -e.prioridade, e.assunto_id))
+    for e in de_ontem:
         if len(escolhidos) >= n:
             break
-        if aid in por_id and aid not in usados:
-            escolhidos.append(por_id[aid])
-            usados.add(aid)
+        escolhidos.append(e)
+        usados.add(e.assunto_id)
 
     restantes = sorted(
         (e for e in estados if e.assunto_id not in usados),

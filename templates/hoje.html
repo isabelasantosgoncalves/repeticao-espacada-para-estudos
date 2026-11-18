@@ -51,7 +51,7 @@
         <p class="sub">
           {% if tipo == 'grande' %}Dia de revisão grande: tudo que venceu + o que vence até {{ proximo_fixo | br }}.
           {% elif tipo == 'completa' %}Tudo que vence hoje ou está atrasado, do mais urgente para o menos.
-          {% elif tipo == 'diaria' %}Revisão mínima: o assunto de ontem + os de menor domínio ({{ cfg.revisao_minima }} assuntos).
+          {% elif tipo == 'diaria' %}Revisão mínima: o assunto de ontem + os de menor domínio (até {{ cfg.revisao_minima }} assuntos, mesmo que ainda não tenham vencido).
           {% else %}Sem revisão hoje.{% if proximo_fixo %} A próxima revisão grande é {{ NOMES_DIAS[proximo_fixo.weekday()] | lower }}, {{ proximo_fixo | br }}.{% endif %}
           {% endif %}
           {% if n_adiantadas %}<span class="adiantadas">Nada vencia hoje, então adiantamos {{ n_adiantadas }} revisão{{ 'ões' if n_adiantadas > 1 }} que estava{{ 'm' if n_adiantadas > 1 }} perto da data.</span>{% endif %}
@@ -71,7 +71,7 @@
             {% if e.atraso %} · <span class="txt-vermelho">{{ e.atraso }} dia{{ 's' if e.atraso > 1 }} de atraso</span>{% endif %}
             {% if item.adiantado %} · <span class="tag tag-leve">adiantado · vencia {{ e.proxima_revisao | br }}</span>{% endif %}</small>
           <span class="barra"><i class="{{ e.dominio_efetivo | cor }}" style="width: {{ (e.dominio_efetivo * 100) | round }}%"></i></span>
-          <small class="rev-dom">{{ e.dominio_efetivo | pct }} de domínio</small>
+          <small class="rev-dom">{{ e.dominio_efetivo | pct }} de domínio · {% if e.atraso %}venceu {{ e.proxima_revisao | br }}{% elif e.proxima_revisao == hoje_data %}vence hoje{% else %}vence {{ e.proxima_revisao | br }}{% endif %}</small>
         </div>
         {% if item.feito %}
         <div class="rev-feito">✓ {% for f in item.feito %}{{ f.acertos }}/{{ f.total }}{{ ', ' if not loop.last }}{% endfor %}</div>
@@ -113,8 +113,38 @@
 
   {# ---------------- coluna lateral ---------------- #}
   <aside class="lateral">
+    {# Prévia de amanhã: mesmas regras de hoje, já contando o que foi feito hoje #}
+    <section class="bloco amanha">
+      <div class="amanha-cab">
+        <h2 class="lat-tit">Amanhã</h2>
+        <span class="amanha-data">{{ NOMES_DIAS[amanha.data.weekday()][:3] | lower }} {{ amanha.data.strftime('%d/%m') }}</span>
+      </div>
+      <p class="amanha-tipo">
+        {% if amanha.tipo == 'grande' %}Revisão grande (dia fixo)
+        {% elif amanha.tipo == 'completa' %}Tudo que vencer
+        {% elif amanha.tipo == 'diaria' %}Revisão mínima
+        {% else %}Sem revisão{% endif %}
+        {% if amanha.itens %} · {{ amanha.itens | length }} assunto{{ 's' if amanha.itens | length > 1 }} · {{ amanha.questoes }} questões{% endif %}
+      </p>
+      {% if amanha.itens %}
+      <ul class="amanha-lista">
+        {% for item in amanha.itens[:5] %}{% set e = item.estado %}
+        <li>
+          <i class="ponto {{ e.dominio_efetivo | cor }}"></i>
+          <span>{{ item.assunto.nome }}{% if item.adiantado %} <small>(adiantado)</small>{% endif %}</span>
+          <small>{{ e.questoes }} q</small>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if amanha.itens | length > 5 %}<p class="mini">e mais {{ amanha.itens | length - 5 }}.</p>{% endif %}
+      {% else %}
+      <p class="mini">Nada para revisar amanhã.</p>
+      {% endif %}
+      {% if amanha.pausadas %}<p class="mini">Amanhã não é dia de: {{ amanha.pausadas | join(', ') }}.</p>{% endif %}
+    </section>
+
     <section class="bloco">
-      <h2 class="lat-tit">Próximos 7 dias</h2>
+      <h2 class="lat-tit">Vencimentos <small class="lat-sub">próximos 7 dias</small></h2>
       <ul class="agenda">
         {% for p in proximos %}
         <li>
@@ -124,7 +154,10 @@
         </li>
         {% endfor %}
       </ul>
-      <p class="mini">Assuntos que voltam em cada dia, no seu ritmo atual.</p>
+      <p class="mini">Quantos assuntos <b>vencem</b> (ficam na hora de revisar) em cada dia. Não é quanto você vai revisar:
+        {% if cfg.modo in ('diaria', 'ambos') %}nos dias comuns entram até {{ cfg.revisao_minima }} por dia{% if cfg.modo == 'ambos' %}, e o que vencer e não entrar fica para a revisão grande do dia fixo{% else %}, começando pelos de menor domínio{% endif %}.
+        {% elif cfg.modo == 'fixa' %}tudo isso entra na revisão grande do dia fixo.
+        {% else %}no seu modo, cada um entra na revisão no dia em que vence.{% endif %}</p>
       <a class="lat-rodape" href="{{ url_for('mapa') }}">Ver o mapa de domínio →</a>
     </section>
 

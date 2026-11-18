@@ -46,7 +46,7 @@
         </span>
         <span class="lm-pct">{{ e.dominio_efetivo | pct }}</span>
         <span class="status status-{{ item.status }}">{{ {'agora': 'Revisar agora', 'esperar': 'Pode esperar', 'dominado': 'Dominado'}[item.status] }}</span>
-        <span class="lm-data {{ 'atrasado' if e.atraso }}">{{ e.proxima_revisao | br }}<small>{{ e.proxima_revisao | relativo }}</small></span>
+        <span class="lm-data {{ 'atrasado' if e.atraso }}" title="Vencimento: dia em que o assunto fica na hora de revisar">{{ 'venceu' if e.atraso else 'vence' }} {{ e.proxima_revisao | br }}<small>{{ e.proxima_revisao | relativo }}</small></span>
       </li>
       {% endfor %}
     </ul>

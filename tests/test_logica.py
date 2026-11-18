@@ -263,6 +263,10 @@ class TestSelecaoDiaria(unittest.TestCase):
         sel = L.selecionar_revisao_diaria(self.estados, [], 3)
         self.assertEqual(self.ids(sel), [2, 3, 4])
 
+    def test_muitos_de_ontem_pega_os_de_menor_dominio(self):
+        sel = L.selecionar_revisao_diaria(self.estados, [1, 4, 3], 2)
+        self.assertEqual(self.ids(sel), [3, 4])   # 50% e 70%, não o de 90%
+
     def test_n_maior_que_disponivel(self):
         self.assertEqual(len(L.selecionar_revisao_diaria(self.estados, [1], 10)), 4)
 
