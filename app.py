@@ -145,7 +145,8 @@ def registrar_filtros(app):
     # Sugestão de teto para cada combinação ritmo × fase (usada no onboarding/Configurações)
     sugestoes = {r: {f: L.sugerir_teto(r, f) for f in L.FASES_APRENDIZADO} for r in L.RITMOS}
     app.jinja_env.globals.update(csrf_token=csrf_token, NOMES_DIAS=S.NOMES_DIAS,
-                                 SUGESTOES_TETO=sugestoes, TETO_MIN=L.TETO_MIN, TETO_MAX=L.TETO_MAX)
+                                 SUGESTOES_TETO=sugestoes, TETO_MIN=L.TETO_MIN, TETO_MAX=L.TETO_MAX,
+                                 FATORES_RITMO=L.RITMOS)
 
 
 def ler_inteiro(valor, nome: str) -> int:
@@ -174,7 +175,7 @@ def validar_data(texto) -> date:
     except ValueError:
         raise ValueError("Data inválida.")
     if d > S.hoje():
-        raise ValueError("A data da sessão não pode estar no futuro.")
+        raise ValueError("A data da prática não pode estar no futuro.")
     return d
 
 
@@ -248,7 +249,7 @@ def registrar_rotas(app: Flask):
         if request.method == "POST" and app.config["CSRF_ATIVO"]:
             enviado = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
             if not enviado or not secrets.compare_digest(enviado, session.get("csrf", "")):
-                abort(400, "Sessão expirada. Recarregue a página e tente de novo.")
+                abort(400, "A página expirou. Recarregue e tente de novo.")
         # Onboarding obrigatório no primeiro acesso
         livres = {"onboarding", "sair", "static", "landing", "demo", "manifest", "service_worker", "offline"}
         if (current_user.is_authenticated and not current_user.onboarding_ok
@@ -410,7 +411,7 @@ def registrar_rotas(app: Flask):
             assunto = do_usuario("assuntos", aid)
             try:
                 if e_grupo(aid):
-                    raise ValueError("tem subassuntos; registre a sessão em um deles.")
+                    raise ValueError("tem subassuntos; registre a prática em um deles.")
                 acertos, total = validar_resultado(ac, tot)
             except ValueError as e:
                 erros.append(f"{assunto['nome']}: {e}")
@@ -452,7 +453,7 @@ def registrar_rotas(app: Flask):
                 valores["assunto_id"] = aid
                 do_usuario("assuntos", aid)
                 if e_grupo(aid):
-                    raise ValueError("Este assunto tem subassuntos: registre a sessão em um deles.")
+                    raise ValueError("Este assunto tem subassuntos: registre a prática em um deles.")
                 d = validar_data(valores["data"])
                 acertos, total = validar_resultado(valores["acertos"], valores["total"])
             except ValueError as e:
@@ -464,13 +465,13 @@ def registrar_rotas(app: Flask):
                         """UPDATE sessoes SET assunto_id = ?, data = ?, acertos = ?, total = ?, observacao = ?
                            WHERE id = ? AND usuario_id = ?""",
                         (aid, d.isoformat(), acertos, total, obs, sessao["id"], current_user.id))
-                    msg = "Sessão atualizada."
+                    msg = "Prática atualizada."
                 else:
                     db.execute(
                         """INSERT INTO sessoes (usuario_id, assunto_id, data, acertos, total, observacao)
                            VALUES (?, ?, ?, ?, ?, ?)""",
                         (current_user.id, aid, d.isoformat(), acertos, total, obs))
-                    msg = f"Sessão registrada: {acertos}/{total} ({round(acertos / total * 100)}%)."
+                    msg = f"Prática registrada: {acertos}/{total} ({round(acertos / total * 100)}%)."
                 db.commit()
                 flash(msg, "ok")
                 return redirect(url_for("historico", aid=aid))
@@ -493,7 +494,7 @@ def registrar_rotas(app: Flask):
         db = banco.get_db()
         db.execute("DELETE FROM sessoes WHERE id = ? AND usuario_id = ?", (sid, current_user.id))
         db.commit()
-        flash("Sessão excluída.", "ok")
+        flash("Prática excluída.", "ok")
         return redirect(url_for("historico", aid=s["assunto_id"]))
 
     # ------------------------------------------------------------------- mapa
@@ -601,7 +602,7 @@ def registrar_rotas(app: Flask):
         do_usuario("materias", mid)
         def acao():
             banco.get_db().execute("DELETE FROM materias WHERE id = ? AND usuario_id = ?", (mid, current_user.id))
-        return executar(acao, "Seção excluída, com seus assuntos e sessões.")
+        return executar(acao, "Seção excluída, com seus assuntos e práticas.")
 
     @app.route("/assuntos/novo", methods=["POST"])
     @login_required
@@ -654,7 +655,7 @@ def registrar_rotas(app: Flask):
         assunto = do_usuario("assuntos", aid)
         def acao():
             banco.get_db().execute("DELETE FROM assuntos WHERE id = ? AND usuario_id = ?", (aid, current_user.id))
-        return executar(acao, "Excluído, com as sessões.", assunto["materia_id"])
+        return executar(acao, "Excluído, com as práticas.", assunto["materia_id"])
 
     # ----------------------------------------------------------- configurações
 
@@ -700,7 +701,7 @@ def registrar_rotas(app: Flask):
         except (S.ErroImportacao, ValueError) as e:
             flash(f"Importação cancelada: {e}", "erro")
         else:
-            flash(f"Importado: {r['materias']} seções, {r['assuntos']} assuntos e {r['sessoes']} sessões.", "ok")
+            flash(f"Importado: {r['materias']} seções, {r['assuntos']} assuntos e {r['sessoes']} práticas.", "ok")
         return redirect(url_for("configuracoes"))
 
 
@@ -716,7 +717,7 @@ def registrar_comandos(app: Flask):
         con = banco.conectar(app.config["DATABASE"])
         n = criar_demo(con, S.hoje())
         con.close()
-        click.echo(f"Conta demo pronta: {DEMO_EMAIL} / demo123 ({n} sessões de exemplo).")
+        click.echo(f"Conta demo pronta: {DEMO_EMAIL} / demo123 ({n} práticas de exemplo).")
 
 
 app = create_app()

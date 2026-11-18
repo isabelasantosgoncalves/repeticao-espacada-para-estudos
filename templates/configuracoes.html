@@ -31,6 +31,10 @@
     {{ campos.minima(cfg) }}
   </div>
 
+  <h2>Dias sem nenhuma revisão</h2>
+  <p class="sub">No começo, com poucos assuntos, alguns dias ficam vazios. Nesses dias o app adianta as revisões mais próximas, para você não ficar parado.</p>
+  {{ campos.adiantar(cfg) }}
+
   <h2>Questões por assunto</h2>
   {{ campos.questoes(cfg) }}
 
@@ -39,7 +43,7 @@
 
 <section class="painel">
   <h2>Seus dados</h2>
-  <p class="sub">Baixe um arquivo JSON com seções, assuntos, sessões e configurações. Serve como backup ou para levar seus dados entre a versão local e a online.</p>
+  <p class="sub">Baixe um arquivo JSON com seções, assuntos, práticas e configurações. Serve como backup ou para levar seus dados entre a versão local e a online.</p>
   <a class="btn btn-sec" href="{{ url_for('exportar') }}">Exportar meus dados</a>
 
   <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" class="form importar">
@@ -47,9 +51,9 @@
     <h3>Importar dados</h3>
     <input type="file" name="arquivo" accept=".json,application/json" required aria-label="Arquivo JSON">
     <label class="check"><input type="checkbox" name="confirmar" value="1" required>
-      Entendo que a importação <b>substitui</b> minhas seções, assuntos e sessões atuais.</label>
+      Entendo que a importação <b>substitui</b> minhas seções, assuntos e práticas atuais.</label>
     <button class="btn" type="submit">Importar</button>
   </form>
 </section>
 {% endblock %}
-{% block scripts %}<script>Revisa.config(document.getElementById('form-config')); Revisa.teto(document.getElementById('form-config'), false);</script>{% endblock %}
+{% block scripts %}<script>Revisa.config(document.getElementById('form-config')); Revisa.teto(document.getElementById('form-config'), false); Revisa.sequencias(document.getElementById('form-config'));</script>{% endblock %}

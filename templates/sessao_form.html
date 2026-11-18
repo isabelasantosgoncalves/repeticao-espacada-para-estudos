@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block titulo %}{{ 'Editar sessão' if sessao else 'Registrar sessão' }}{% endblock %}
+{% block titulo %}{{ 'Editar prática' if sessao else 'Registrar prática' }}{% endblock %}
 {% block main_class %}conteudo medio{% endblock %}
 {% block conteudo %}
 <div class="painel">
-  <h1>{{ 'Editar sessão' if sessao else 'Registrar sessão' }}</h1>
+  <h1>{{ 'Editar prática' if sessao else 'Registrar prática' }}</h1>
   <p class="sub">Anote quantas questões você fez e quantas acertou.</p>
 
   {% if not materias or not (materias | map(attribute='folhas') | select | list) %}
@@ -47,7 +47,7 @@
       <textarea name="observacao" rows="3" maxlength="1000" placeholder="Ex.: errei por falta de atenção">{{ v.observacao }}</textarea>
     </label>
     <div class="acoes">
-      <button class="btn btn-g" type="submit">{{ 'Salvar alterações' if sessao else 'Registrar sessão' }}</button>
+      <button class="btn btn-g" type="submit">{{ 'Salvar alterações' if sessao else 'Registrar prática' }}</button>
       {% if sessao %}<a class="btn btn-sec" href="{{ url_for('historico', aid=sessao.assunto_id) }}">Cancelar</a>{% endif %}
     </div>
   </form>

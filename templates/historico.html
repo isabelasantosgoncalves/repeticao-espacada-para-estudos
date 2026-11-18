@@ -9,7 +9,7 @@
   {% if filhos %}
   <a class="btn btn-sec" href="{{ url_for('materias') }}#assunto-{{ assunto.id }}">Gerenciar subassuntos</a>
   {% else %}
-  <a class="btn" href="{{ url_for('nova_sessao', assunto=assunto.id) }}">Registrar sessão</a>
+  <a class="btn" href="{{ url_for('nova_sessao', assunto=assunto.id) }}">Registrar prática</a>
   {% endif %}
 </div>
 
@@ -64,12 +64,12 @@
     <span>Próxima revisão</span>
     <b class="{{ 'txt-vermelho' if estado.atraso }}">{{ estado.proxima_revisao | br }}</b>
     <small>{{ estado.proxima_revisao | relativo }} · intervalo de {{ estado.intervalo }} dias</small>
-    {% if estado.em_aprendizado %}<small class="tag tag-leve fase">fase de aprendizado · sessão {{ estado.n_sessoes }} de {{ estado.fase_total }}</small>{% endif %}
+    {% if estado.em_aprendizado %}<small class="tag tag-leve fase">fase de aprendizado · prática {{ estado.n_sessoes }} de {{ estado.fase_total }}</small>{% endif %}
   </div>
   <div class="stat">
     <span>Questões sugeridas</span>
     <b>{{ estado.questoes }}</b>
-    <small>última sessão: {{ estado.ultimo_pct | pct }}</small>
+    <small>última prática: {{ estado.ultimo_pct | pct }}</small>
   </div>
   <div class="stat">
     <span>Sequência ≥ 85%</span>
@@ -80,13 +80,13 @@
 
 <section class="bloco">
   <div class="bloco-cab sem-num"><div><h2>Evolução da % de acerto</h2></div></div>
-  <div class="grafico"><canvas id="grafico" aria-label="Gráfico da porcentagem de acerto por sessão" role="img"></canvas></div>
+  <div class="grafico"><canvas id="grafico" aria-label="Gráfico da porcentagem de acerto por prática" role="img"></canvas></div>
 </section>
 {% endif %}
 
 {% if not filhos or sessoes %}
 <section class="bloco">
-  <div class="bloco-cab sem-num"><div><h2>Sessões <span class="cont">{{ sessoes | length }}</span></h2>
+  <div class="bloco-cab sem-num"><div><h2>Práticas <span class="cont">{{ sessoes | length }}</span></h2>
     {% if filhos %}<p class="sub">Registradas antes de criar os subassuntos. Ficam no histórico, mas não entram mais nas revisões.</p>{% endif %}</div></div>
   {% if sessoes %}
   <div class="tabela-wrap">
@@ -101,7 +101,7 @@
         <td class="obs">{{ s.observacao or '—' }}</td>
         <td><div class="acoes-linha">
           <a href="{{ url_for('editar_sessao', sid=s.id) }}" class="link-p">Editar</a>
-          <form method="post" action="{{ url_for('excluir_sessao', sid=s.id) }}" data-confirmar="Excluir a sessão de {{ s.data | br }}?">
+          <form method="post" action="{{ url_for('excluir_sessao', sid=s.id) }}" data-confirmar="Excluir a prática de {{ s.data | br }}?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="link-p perigo">Excluir</button>
           </form>
@@ -112,7 +112,7 @@
     </table>
   </div>
   {% else %}
-  <p class="nada">Nenhuma sessão ainda. <a href="{{ url_for('nova_sessao', assunto=assunto.id) }}">Registre a primeira</a>.</p>
+  <p class="nada">Nenhuma prática ainda. <a href="{{ url_for('nova_sessao', assunto=assunto.id) }}">Registre a primeira</a>.</p>
   {% endif %}
 </section>
 {% endif %}

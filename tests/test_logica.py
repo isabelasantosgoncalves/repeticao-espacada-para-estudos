@@ -312,11 +312,11 @@ class TestEscolhaDaFase(unittest.TestCase):
     def test_opcoes(self):
         seq = lambda nome, n: L.calcular_intervalo([1.0] * n, [10] * n, tetos=L.tetos_da_fase(nome))[0]
         self.assertEqual([seq("padrao", n) for n in (1, 2, 3, 4)], [7, 15, 30, 60])
-        self.assertEqual([seq("cautelosa", n) for n in (1, 2, 3, 4)], [4, 10, 20, 40])
+        self.assertEqual([seq("cautelosa", n) for n in (1, 2, 3, 4, 5)], [2, 4, 8, 15, 30])
         self.assertEqual([seq("degraus", n) for n in (1, 2, 3, 4)], [3, 7, 15, 30])
         self.assertEqual([seq("solta", n) for n in (1, 2, 3)], [10, 20, 40])
         # o rótulo de cada opção mostra exatamente essa sequência
-        self.assertEqual([seq("cautelosa", n) for n in (1, 2, 3, 4, 5)], [4, 10, 20, 40, 80])
+        self.assertEqual([seq("cautelosa", n) for n in (1, 2, 3, 4, 5, 6)], [2, 4, 8, 15, 30, 60])
 
     def test_desconhecida_usa_padrao(self):
         self.assertEqual(L.tetos_da_fase(None), L.TETOS_APRENDIZADO)
@@ -417,6 +417,19 @@ class TestDiasDaSecao(unittest.TestCase):
         self.assertEqual(livre.proxima_revisao, HOJE)
         self.assertEqual(secao.proxima_revisao, HOJE + timedelta(days=1))
         self.assertEqual(secao.atraso, 0)
+
+
+class TestAdiantar(unittest.TestCase):
+    def test_pega_as_mais_proximas(self):
+        estados = [
+            estado(1, 0.9, 0.1, proxima=HOJE + timedelta(days=9)),
+            estado(2, 0.6, 0.4, proxima=HOJE + timedelta(days=2)),
+            estado(3, 0.8, 0.2, proxima=HOJE + timedelta(days=2)),
+            estado(4, 0.5, 0.5, proxima=HOJE + timedelta(days=5)),
+        ]
+        self.assertEqual([e.assunto_id for e in L.selecionar_adiantadas(estados, HOJE, 1)], [2])
+        self.assertEqual([e.assunto_id for e in L.selecionar_adiantadas(estados, HOJE, 3)], [2, 3, 4])
+        self.assertEqual(L.selecionar_adiantadas(estados, HOJE, 0), [])
 
 
 class TestMapa(unittest.TestCase):

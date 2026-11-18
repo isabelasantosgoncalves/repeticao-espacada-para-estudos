@@ -163,7 +163,66 @@
     atualizar();
   };
 
-  // Registrar sessão: matéria -> assunto.
+  // Mapa: os contadores do topo filtram a lista por status.
+  Revisa.filtroMapa = function (barra) {
+    if (!barra) return;
+    var botoes = barra.querySelectorAll('[data-filtro]');
+    var vazio = document.querySelector('.mapa-vazio');
+    botoes.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var f = b.getAttribute('data-filtro');
+        botoes.forEach(function (x) {
+          x.classList.toggle('on', x === b);
+          x.setAttribute('aria-selected', x === b ? 'true' : 'false');
+        });
+        var algum = false;
+        document.querySelectorAll('[data-secao-mapa]').forEach(function (sec) {
+          var visiveis = 0;
+          sec.querySelectorAll('li[data-status]').forEach(function (li) {
+            var mostra = f === 'todos' || li.getAttribute('data-status') === f;
+            li.hidden = !mostra;
+            if (mostra) visiveis++;
+          });
+          sec.hidden = visiveis === 0;
+          if (visiveis) algum = true;
+        });
+        if (vazio) vazio.hidden = algum;
+      });
+    });
+  };
+
+  // Fase de aprendizado: mostra a sequência de cada opção já com o ritmo e o
+  // máximo de dias escolhidos (mesma conta do servidor: arredonda "meio para o par").
+  function arredondar(x) {
+    var f = Math.floor(x), d = x - f;
+    if (Math.abs(d - 0.5) < 1e-9) return f % 2 === 0 ? f : f + 1;
+    return Math.round(x);
+  }
+  Revisa.sequencias = function (form) {
+    var box = form && form.querySelector('[data-fases]');
+    if (!box) return;
+    var fatores = JSON.parse(box.getAttribute('data-fatores'));
+    function atualizar() {
+      var r = form.querySelector('input[name="ritmo"]:checked');
+      var fator = fatores[r ? r.value : 'leve'] || 1;
+      var campo = form.querySelector('input[name="teto_dias"]');
+      var teto = campo && parseInt(campo.value, 10) > 0 ? parseInt(campo.value, 10) : Infinity;
+      box.querySelectorAll('[data-seq]').forEach(function (el) {
+        var dias = [];
+        el.getAttribute('data-seq').split(',').forEach(function (n) {
+          var d = Math.min(Math.max(1, arredondar(parseInt(n, 10) * fator)), teto);
+          if (dias[dias.length - 1] !== d) dias.push(d);
+        });
+        el.textContent = dias.join(' → ');
+      });
+    }
+    form.addEventListener('change', atualizar);
+    form.addEventListener('input', atualizar);
+    form.addEventListener('click', function (ev) { if (ev.target.closest('.chip-teto, [data-usar-sugestao]')) setTimeout(atualizar, 0); });
+    atualizar();
+  };
+
+  // Registrar prática: seção -> assunto.
   Revisa.seletorAssunto = function () {
     var selM = document.getElementById('sel-materia');
     var selA = document.getElementById('sel-assunto');

@@ -15,16 +15,17 @@
 {% endmacro %}
 
 {% macro aprendizado(cfg) %}
-<div class="opcoes">
+{# A sequência de cada opção é recalculada no navegador pelo ritmo e pelo máximo de dias escolhidos #}
+<div class="opcoes" data-fases data-fatores='{{ FATORES_RITMO | tojson }}'>
   {% for valor, titulo, desc, seq in [
-      ('padrao', 'Equilíbrio (recomendado)', 'Uma semana, depois quinze dias, depois o intervalo normal.', '7 → 15 → 30 → 60 dias'),
-      ('cautelosa', 'Esqueço rápido', 'O conteúdo é muito novo para mim ou costumo esquecer em poucos dias. Três degraus antes de espaçar.', '4 → 10 → 20 → 40 dias'),
-      ('degraus', 'Quero confirmar bem', 'Prefiro revisar logo cedo, em três degraus, antes de espaçar.', '3 → 7 → 15 → 30 dias'),
-      ('solta', 'Já tenho base', 'Os assuntos não são totalmente novos; posso espaçar mais cedo.', '10 → 20 → 40 dias')] %}
+      ('padrao', 'Equilíbrio (recomendado)', 'Uma semana, depois quinze dias, depois o intervalo normal.', [7, 15, 30, 60]),
+      ('cautelosa', 'Esqueço rápido', 'O conteúdo é muito novo para mim ou costumo esquecer em poucos dias. Degraus curtos antes de espaçar.', [2, 4, 8, 15, 30]),
+      ('degraus', 'Quero confirmar bem', 'Prefiro revisar logo cedo, em três degraus, antes de espaçar.', [3, 7, 15, 30]),
+      ('solta', 'Já tenho base', 'Os assuntos não são totalmente novos; posso espaçar mais cedo.', [10, 20, 40])] %}
   <label class="opcao">
     <input type="radio" name="aprendizado" value="{{ valor }}" {{ 'checked' if cfg.aprendizado == valor }} required>
     <span><b>{{ titulo }}</b><small>{{ desc }}</small>
-      <small class="opcao-meta">Acertando tudo: {{ seq }} (ritmo leve)</small></span>
+      <small class="opcao-meta">Acertando tudo: <span data-seq="{{ seq | join(',') }}">{{ seq | join(' → ') }}</span> dias</small></span>
   </label>
   {% endfor %}
 </div>
@@ -44,6 +45,17 @@
   <p class="mini">Mesmo que você domine um assunto, ele volta para revisão pelo menos a cada esse número de dias.
     <b>Livre:</b> para quem estuda a longo prazo, sem prova marcada. A cada revisão bem-feita o intervalo dobra
     (30 → 60 → 120 → 240 dias), até no máximo 1 ano.</p>
+</div>
+{% endmacro %}
+
+{% macro adiantar(cfg) %}
+<div class="dias">
+  {% for n, rotulo in [(0, 'Não adiantar'), (1, '1 assunto'), (2, '2 assuntos'), (3, '3 assuntos')] %}
+  <label class="dia dia-largo">
+    <input type="radio" name="adiantar" value="{{ n }}" {{ 'checked' if cfg.adiantar == n }}>
+    <span>{{ rotulo }}</span>
+  </label>
+  {% endfor %}
 </div>
 {% endmacro %}
 

@@ -14,7 +14,7 @@
     { "src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Registrar sessão", "url": "/sessoes/nova", "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Registrar prática", "url": "/sessoes/nova", "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Mapa de domínio", "url": "/mapa", "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

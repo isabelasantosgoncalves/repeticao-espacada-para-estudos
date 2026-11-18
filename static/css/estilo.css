@@ -536,3 +536,31 @@ select { max-width: 100%; text-overflow: ellipsis; }
 .teto-num input { width: 84px; text-align: center; }
 .teto .mini { margin: 10px 0 0; }
 .pausadas { display: block; margin-top: 4px; font-size: .84rem; color: var(--texto-3); }
+.dia-largo span { width: auto; padding: 0 14px; }
+.adiantadas { display: block; margin-bottom: 4px; color: var(--acento); font-size: .88rem; }
+
+/* mapa unificado: contadores = filtros */
+.mapa-resumo { grid-template-columns: repeat(4, 1fr); }
+button.mr { font: inherit; text-align: left; background: var(--superficie); border: 0; border-top: 3px solid var(--linha-forte); cursor: pointer; }
+button.mr + button.mr { border-left: 1px solid var(--linha); }
+button.mr:hover { background: var(--fundo); }
+button.mr.on { background: var(--acento-claro); }
+button.mr.on span { color: var(--acento); font-weight: 600; }
+.mr-todos { border-top-color: var(--acento) !important; }
+.mr-agora { border-top-color: var(--vermelho) !important; }
+.mr-esperar { border-top-color: var(--amarelo) !important; }
+.mr-dominado { border-top-color: var(--verde) !important; }
+.mapa-secao + .mapa-secao { margin-top: 10px; }
+.mapa-lista .lista-mapa li { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.3fr) 56px 118px 120px; }
+.mapa-lista .lista-mapa li[hidden] { display: none; }
+.status { font-family: var(--mono); font-size: .72rem; padding: 2px 8px; border-radius: 4px; text-align: center; white-space: nowrap; }
+.status-agora { background: var(--vermelho-claro); color: var(--vermelho); }
+.status-esperar { background: var(--amarelo-claro); color: #8a6519; }
+.status-dominado { background: var(--verde-claro); color: #2c6a45; }
+.mapa-rodape { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--linha); }
+@media (max-width: 640px) {
+  .mapa-resumo { grid-template-columns: 1fr 1fr; }
+  button.mr:nth-child(3) { border-left: 0; }
+  .mapa-lista .lista-mapa li { grid-template-columns: 1fr auto; }
+  .mapa-lista .status { order: 4; justify-self: start; }
+}

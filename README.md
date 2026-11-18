@@ -1,7 +1,7 @@
 # Revisa · repetição espaçada para estudos
 
 Aplicação web multiusuário que organiza as revisões de estudo com **repetição espaçada**.
-A cada sessão você registra quantas questões fez e quantas acertou; o Revisa calcula o
+A cada prática você registra quantas questões fez e quantas acertou; o Revisa calcula o
 domínio de cada assunto, decide quando ele deve voltar e quantas questões fazer, e monta
 a revisão do dia.
 
@@ -17,9 +17,9 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 - **Contas de usuário**: cadastro, login e logout, senhas com hash. Cada usuário só vê e edita os próprios dados (checado no backend em todas as rotas).
 - **Onboarding** no primeiro acesso, antes de entrar no app: ritmo de estudo, fase de aprendizado, máximo de dias sem revisão, modo de revisão, dia(s) fixo(s), revisão mínima diária e questões por assunto.
 - **Hoje (painel)**: números do dia (revisões feitas, questões sugeridas, atrasados, domínio médio), a lista de revisões com registro direto na linha (acertos + Enter), a agenda dos próximos 7 dias e o progresso nos assuntos ainda não começados.
-- **Registrar sessão**: formulário rápido (matéria → assunto, data, acertos, total, observação).
-- **Mapa de domínio**: assuntos por matéria com barra colorida (vermelho < 50%, amarelo 50–84%, verde ≥ 85%), separados em *Revisar agora*, *Pode esperar* e *Dominado*.
-- **Histórico do assunto**: lista de sessões (editar/excluir) e gráfico de linha da % de acerto (Chart.js).
+- **Registrar prática**: formulário rápido (seção → assunto, data, acertos, total, observação).
+- **Mapa de domínio**: uma lista só, por seção, com barra colorida (vermelho < 50%, amarelo 50–84%, verde ≥ 85%) e o status de cada assunto. Os contadores do topo (*Revisar agora*, *Pode esperar*, *Dominado*) servem de filtro.
+- **Histórico do assunto**: lista de práticas (editar/excluir) e gráfico de linha da % de acerto (Chart.js).
 - **Seções, assuntos e subassuntos**: a seção agrupa o que se estuda junto (ex.: SAT Math); os assuntos aparecem em cartões lado a lado, com os subassuntos dentro. Cada seção tem seus **dias de estudo** (todo dia ou dias escolhidos) e um modo de edição próprio.
 - **Configurações**: tudo do onboarding, mais **exportar** e **importar** os dados em JSON.
 - **Instalável como app** (PWA): no Chrome/Edge aparece "Instalar Revisa" na barra de endereço; no celular, "Adicionar à tela inicial".
@@ -36,7 +36,7 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 |---|---|
 | ![Mapa](docs/prints/mapa.png) | ![Histórico](docs/prints/historico.png) |
 
-| Registrar sessão | Seções e assuntos |
+| Registrar prática | Seções e assuntos |
 |---|---|
 | ![Registrar](docs/prints/registrar.png) | ![Seções](docs/prints/materias.png) |
 
@@ -53,13 +53,13 @@ testes em [`tests/test_logica.py`](tests/test_logica.py).
 
 ### 1. Domínio do assunto
 
-Média ponderada da % de acerto das **últimas 3 sessões**. O peso de cada sessão combina duas coisas:
+Média ponderada da % de acerto das **últimas 3 práticas**. O peso de cada prática combina duas coisas:
 
 - **Posição**: 50% para a mais recente, 30% para a anterior e 20% para a antepenúltima.
-- **Tamanho**: sessões com 10 questões ou mais têm peso cheio; com menos, o peso é proporcional
+- **Tamanho**: práticas com 10 questões ou mais têm peso cheio; com menos, o peso é proporcional
   (2 questões = 0,2 do peso). Assim, errar 1 de 2 questões não pesa o mesmo que errar 10 de 20.
 
-Os pesos são normalizados para somar 1 (com menos de 3 sessões, ou com sessões pequenas, o que sobra é redistribuído):
+Os pesos são normalizados para somar 1 (com menos de 3 práticas, ou com práticas pequenas, o que sobra é redistribuído):
 
 ```
 peso_i    = peso_posição_i × min(1, questões_i / 10)
@@ -68,7 +68,7 @@ domínio   = Σ (acerto_i × peso_i) / Σ peso_i
 
 ### 2. Intervalo e questões sugeridas
 
-A tabela é aplicada ao **domínio** (e não só à última sessão), então a mudança é gradual:
+A tabela é aplicada ao **domínio** (e não só à última prática), então a mudança é gradual:
 
 | Domínio  | Próxima revisão | Questões |
 |----------|-----------------|----------|
@@ -78,34 +78,34 @@ A tabela é aplicada ao **domínio** (e não só à última sessão), então a m
 | 85–94%   | 15 dias         | 6        |
 | ≥ 95%    | 30 dias         | 4        |
 
-- **Bônus**: com 2 ou mais sessões seguidas ≥ 85% (e domínio ≥ 85%), o intervalo anterior **dobra** a cada nova sessão boa (15 → 30 → 60 …). O intervalo nunca fica abaixo do da tabela e é limitado pelo máximo de dias escolhido pelo usuário (no máximo 1 ano).
-  - O bônus é proporcional ao tamanho da sessão: só dobra se você fez pelo menos as questões sugeridas. Com menos, cresce na proporção (`1 + feitas/sugeridas`): acertar 1 de 1 quando o app sugeria 6 leva 30 dias para 35, não para 60.
-- Uma sessão abaixo de 85% encerra a sequência, e o intervalo volta ao da tabela para o domínio atual.
+- **Bônus**: com 2 ou mais práticas seguidas ≥ 85% (e domínio ≥ 85%), o intervalo anterior **dobra** a cada nova prática boa (15 → 30 → 60 …). O intervalo nunca fica abaixo do da tabela e é limitado pelo máximo de dias escolhido pelo usuário (no máximo 1 ano).
+  - O bônus é proporcional ao tamanho da prática: só dobra se você fez pelo menos as questões sugeridas. Com menos, cresce na proporção (`1 + feitas/sugeridas`): acertar 1 de 1 quando o app sugeria 6 leva 30 dias para 35, não para 60.
+- Uma prática abaixo de 85% encerra a sequência, e o intervalo volta ao da tabela para o domínio atual.
 - Se o usuário escolheu **número fixo** de questões, ele substitui a coluna "Questões".
 
-**Exemplo.** Um assunto vinha de duas sessões de 20 questões com 90% (revisão em 30 dias, pelo bônus):
+**Exemplo.** Um assunto vinha de duas práticas de 20 questões com 90% (revisão em 30 dias, pelo bônus):
 
-| Nova sessão | Domínio | Próxima revisão |
+| Nova prática | Domínio | Próxima revisão |
 |---|---|---|
 | acertou 1 de 2 (50%) | 83% | 7 dias |
 | de novo, 1 de 2 | 72% | 7 dias |
 | de novo, 1 de 2 | 50% | 4 dias |
 | *em vez disso:* 10 de 20 (50%) | 70% | 7 dias |
 
-Uma sessão pequena e ruim mexe pouco; várias seguidas levam o assunto para o fundo da tabela.
+Uma prática pequena e ruim mexe pouco; várias seguidas levam o assunto para o fundo da tabela.
 
 **Fase de aprendizado.** Um assunto novo não vai direto para 30 dias, mesmo com 100% de acerto:
-nas primeiras sessões o intervalo tem um teto. Como o bônus parte do valor limitado, quem acerta
+nas primeiras práticas o intervalo tem um teto. Como o bônus parte do valor limitado, quem acerta
 tudo avança aos poucos. O usuário escolhe a opção no onboarding e em Configurações:
 
 | Opção | Tetos | Acertando tudo |
 |---|---|---|
 | Equilíbrio (padrão) | 7, 15 | 7 → 15 → 30 → 60 dias |
-| Esqueço rápido | 4, 10, 20 | 4 → 10 → 20 → 40 dias |
+| Esqueço rápido | 2, 4, 8, 15 | 2 → 4 → 8 → 15 → 30 dias |
 | Quero confirmar bem | 3, 7, 15 | 3 → 7 → 15 → 30 dias |
 | Já tenho base | 10, 20 | 10 → 20 → 40 dias |
 
-Se a sessão vai mal, a tabela já dá um intervalo menor que o teto, e ele vale normalmente.
+Se a prática vai mal, a tabela já dá um intervalo menor que o teto, e ele vale normalmente.
 
 **Ritmo de estudo.** Escolhido no onboarding e em Configurações, multiplica o intervalo final
 (inclusive bônus e fase de aprendizado):
@@ -151,13 +151,15 @@ Assuntos com domínio baixo e assuntos atrasados sobem na fila. As revisões sã
 | Um dia fixo na semana | Revisão grande | Sem revisão (só assunto novo) |
 | Dia fixo + poucos assuntos | Revisão grande | Revisão mínima |
 
+- **Dia vazio:** se num dia nada vence (comum no começo, com poucos assuntos), o app **adianta** as revisões mais próximas (1 por padrão; 0 a 3 em Configurações), marcadas como "adiantado".
+
 O modo "tudo que vencer" é pensado para a fase só de questões (ritmo Intenso): no onboarding,
 ele já vem sugerido quando a pessoa escolhe esse ritmo.
 
 - **Revisão mínima diária**: o assunto estudado ontem + os assuntos de menor domínio efetivo, até completar N assuntos (padrão 2). Se o assunto de ontem também é o de menor domínio, ele entra uma vez só e a vaga vai para o próximo.
 - **Revisão grande**: tudo que já venceu e não foi feito + tudo que vence antes do próximo dia fixo, por prioridade, sem limite de questões.
-- A seleção do dia usa só as sessões **anteriores a hoje**, então a lista não muda enquanto você registra os resultados; o que já foi feito aparece marcado.
-- A **observação** de cada sessão é só um registro: não entra em nenhum cálculo.
+- A seleção do dia usa só as práticas **anteriores a hoje**, então a lista não muda enquanto você registra os resultados; o que já foi feito aparece marcado.
+- A **observação** de cada prática é só um registro: não entra em nenhum cálculo.
 
 ### 6. Dias de estudo por seção
 
@@ -169,7 +171,7 @@ então o esquecimento e a prioridade não punem os dias de folga daquela seção
 ### 7. Subassuntos
 
 A hierarquia é **seção → assunto → subassunto** (um nível de subassunto). Quando um assunto ganha
-subassuntos, ele vira um **grupo**: as sessões são registradas nos subassuntos, e só eles entram nas
+subassuntos, ele vira um **grupo**: as práticas são registradas nos subassuntos, e só eles entram nas
 revisões e no mapa. O domínio do grupo é a **média simples** do domínio efetivo dos subassuntos já
 estudados. Cada um pesa igual, para que um ponto fraco (ex.: inequações) não fique escondido atrás
 de um ponto forte (ex.: equações).
@@ -232,7 +234,7 @@ flask seed-demo
 ```
 
 Cria (ou recria do zero) a conta **demo@demo.com / demo123** com 4 matérias, 15 assuntos e
-cerca de 60 sessões simuladas. Na landing page há um link "Entrar na conta demo".
+cerca de 60 práticas simuladas. Na landing page há um link "Entrar na conta demo".
 
 ### Testes
 
@@ -247,7 +249,7 @@ além de login obrigatório, CSRF, isolamento entre usuários, validação e exp
 
 | Variável | Para que serve |
 |---|---|
-| `SECRET_KEY` | Chave das sessões. Gere com `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `SECRET_KEY` | Chave que protege o login (cookies de sessão). Gere com `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `DATABASE_PATH` | Opcional. Caminho do banco (padrão: `estudos.db` na pasta do app) |
 | `APP_TZ` | Fuso usado para saber qual é o "hoje" (padrão `America/Sao_Paulo`) |
 | `FLASK_DEBUG` | `1` liga o modo debug local |

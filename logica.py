@@ -49,7 +49,7 @@ TETOS_APRENDIZADO = (7, 15)
 
 # O usuário escolhe como quer a fase de aprendizado (onboarding/Configurações).
 FASES_APRENDIZADO = {
-    "cautelosa": (4, 10, 20), # esquece rápido / conteúdo muito novo: 4 -> 10 -> 20 -> 40
+    "cautelosa": (2, 4, 8, 15),  # esquece rápido: degraus curtos 2 -> 4 -> 8 -> 15 -> 30
     "degraus": (3, 7, 15),    # confirma bem antes de espaçar:        3 -> 7 -> 15 -> 30
     "padrao": (7, 15),        # equilíbrio (recomendado):             7 -> 15 -> 30 -> 60
     "solta": (10, 20),        # já tem alguma base:                   10 -> 20 -> 40
@@ -461,6 +461,18 @@ def selecionar_revisao_completa(estados: list[EstadoAssunto], hoje: date) -> lis
     venceu, da maior para a menor prioridade. Sem limite de assuntos.
     """
     return ordenar_por_prioridade([e for e in estados if e.proxima_revisao <= hoje])
+
+
+def selecionar_adiantadas(estados: list[EstadoAssunto], hoje: date, n: int) -> list[EstadoAssunto]:
+    """
+    Dia sem nenhuma revisão (comum no começo, com poucos assuntos): adianta as
+    n revisões mais próximas. Desempate: maior prioridade (menor domínio) primeiro.
+    """
+    if n <= 0:
+        return []
+    futuras = [e for e in estados if e.proxima_revisao > hoje]
+    futuras.sort(key=lambda e: (e.proxima_revisao, -e.prioridade, e.assunto_id))
+    return futuras[:n]
 
 
 def classificar_para_mapa(estado: EstadoAssunto, hoje: date) -> str:

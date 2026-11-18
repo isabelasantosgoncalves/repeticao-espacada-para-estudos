@@ -190,6 +190,12 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     else:
         selecao = []
 
+    # Dia vazio: adianta as revisões mais próximas (configurável, padrão 1).
+    adiantadas: set[int] = set()
+    if tipo and not selecao and cfg.get("adiantar", 1) > 0:
+        selecao = L.selecionar_adiantadas(list(est.values()), dia, cfg["adiantar"])
+        adiantadas = {e.assunto_id for e in selecao}
+
     # Sessões já registradas hoje
     feitas_hoje: dict[int, list] = defaultdict(list)
     for r in db.execute(
@@ -201,7 +207,8 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     for e in selecao:
         if e.assunto_id in assuntos:
             revisao.append({"assunto": assuntos[e.assunto_id], "estado": e,
-                            "feito": feitas_hoje.get(e.assunto_id)})
+                            "feito": feitas_hoje.get(e.assunto_id),
+                            "adiantado": e.assunto_id in adiantadas})
 
     # ---- Painel: números do dia, próximos dias e progresso no conteúdo ----
     # Estado ATUAL (inclui as sessões de hoje) para atrasos, domínio e agenda.
@@ -238,6 +245,7 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
         "fixas": questoes_fixas(cfg),
         "tem_assuntos": bool(assuntos),
         "pausadas": sorted(pausadas, key=chave_ordem),
+        "n_adiantadas": len(adiantadas),
     }
 
 
@@ -246,22 +254,28 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
 # ---------------------------------------------------------------------------
 
 def montar_mapa(db, uid: int, dia: date) -> dict:
+    """
+    Mapa de domínio numa lista só: assuntos já estudados agrupados por seção,
+    cada um com seu status (agora / esperar / dominado). Os contadores do topo
+    servem de filtro. Assuntos ainda não estudados ficam só na tela Hoje.
+    """
     cfg = carregar_config(db, uid)
     folhas = listar_folhas(db, uid)
     est = estados(db, uid, dia, cfg, ids={a["id"] for a in folhas})
-    grupos = {"agora": defaultdict(list), "esperar": defaultdict(list), "dominado": defaultdict(list)}
-    nao_estudados = defaultdict(list)
+    ordem_status = {"agora": 0, "esperar": 1, "dominado": 2}
+    secoes: dict[str, list] = {}
+    contagem = {"agora": 0, "esperar": 0, "dominado": 0}
     for a in folhas:
         e = est.get(a["id"])
         if e is None:
-            nao_estudados[a["materia"]].append(a)
             continue
-        grupos[L.classificar_para_mapa(e, dia)][a["materia"]].append({"assunto": a, "estado": e})
-    for g in grupos.values():
-        for lista in g.values():
-            lista.sort(key=lambda x: (-x["estado"].prioridade))
-    contagem = {k: sum(len(v) for v in g.values()) for k, g in grupos.items()}
-    return {"grupos": grupos, "nao_estudados": nao_estudados, "contagem": contagem}
+        status = L.classificar_para_mapa(e, dia)
+        contagem[status] += 1
+        secoes.setdefault(a["materia"], []).append({"assunto": a, "estado": e, "status": status})
+    for lista in secoes.values():
+        lista.sort(key=lambda x: (ordem_status[x["status"]], -x["estado"].prioridade))
+    return {"secoes": secoes, "contagem": contagem, "total": sum(contagem.values()),
+            "n_nao_estudados": sum(1 for a in folhas if a["id"] not in est)}
 
 
 # ---------------------------------------------------------------------------
@@ -303,6 +317,7 @@ def exportar(db, uid: int) -> dict:
             "ritmo": cfg["ritmo"],
             "aprendizado": cfg["aprendizado"],
             "teto_dias": cfg["teto_dias"],
+            "adiantar": cfg["adiantar"],
         },
         "materias": materias,
     }
@@ -317,9 +332,9 @@ def _validar_sessao(s: dict) -> tuple[str, int, int, str | None]:
         data = date.fromisoformat(str(s["data"])).isoformat()
         acertos, total = int(s["acertos"]), int(s["total"])
     except (KeyError, TypeError, ValueError):
-        raise ErroImportacao("Sessão com data, acertos ou total inválidos.")
+        raise ErroImportacao("Prática com data, acertos ou total inválidos.")
     if total <= 0 or acertos < 0 or acertos > total:
-        raise ErroImportacao(f"Sessão de {data}: acertos deve estar entre 0 e o total, e o total deve ser maior que 0.")
+        raise ErroImportacao(f"Prática de {data}: acertos deve estar entre 0 e o total, e o total deve ser maior que 0.")
     obs = s.get("observacao")
     return data, acertos, total, (str(obs)[:1000] if obs else None)
 
@@ -422,9 +437,13 @@ def validar_config(form: dict) -> dict:
     teto = int(teto) if teto not in (None, "") else L.sugerir_teto(ritmo, aprendizado)
     if not L.TETO_MIN <= teto <= L.TETO_MAX:
         raise ValueError(f"O máximo de dias sem revisão deve ficar entre {L.TETO_MIN} e {L.TETO_MAX}.")
+    adiantar = form.get("adiantar")
+    adiantar = 1 if adiantar in (None, "") else int(adiantar)
+    if not 0 <= adiantar <= 3:
+        raise ValueError("Escolha adiantar de 0 a 3 assuntos.")
     return {"modo": modo, "dias_fixos": dias, "revisao_minima": minima,
             "questoes_modo": qmodo, "questoes_fixas": qfixas, "ritmo": ritmo,
-            "aprendizado": aprendizado, "teto_dias": teto}
+            "aprendizado": aprendizado, "teto_dias": teto, "adiantar": adiantar}
 
 
 def salvar_config(db, uid: int, dados: dict, commit: bool = True):
@@ -432,9 +451,10 @@ def salvar_config(db, uid: int, dados: dict, commit: bool = True):
     carregar_config(db, uid)  # garante que a linha existe
     db.execute(
         """UPDATE configuracoes SET modo = ?, dias_fixos = ?, revisao_minima = ?,
-           questoes_modo = ?, questoes_fixas = ?, ritmo = ?, aprendizado = ?, teto_dias = ?
-           WHERE usuario_id = ?""",
+           questoes_modo = ?, questoes_fixas = ?, ritmo = ?, aprendizado = ?, teto_dias = ?,
+           adiantar = ? WHERE usuario_id = ?""",
         (c["modo"], ",".join(map(str, c["dias_fixos"])), c["revisao_minima"],
-         c["questoes_modo"], c["questoes_fixas"], c["ritmo"], c["aprendizado"], c["teto_dias"], uid))
+         c["questoes_modo"], c["questoes_fixas"], c["ritmo"], c["aprendizado"], c["teto_dias"],
+         c["adiantar"], uid))
     if commit:
         db.commit()

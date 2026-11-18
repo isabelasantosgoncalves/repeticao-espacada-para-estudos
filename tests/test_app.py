@@ -90,7 +90,7 @@ class TestApp(unittest.TestCase):
                                             "acertos": acertos, "total": total}, "/sessoes/nova")
             self.assertEqual(r.status_code, 200)  # volta ao formulário com erro
         html = self.c.get("/assuntos/1").get_data(as_text=True)
-        self.assertIn("Nenhuma sessão ainda", html)
+        self.assertIn("Nenhuma prática ainda", html)
 
     def test_exportar_e_importar(self):
         self.criar_usuario("e@e.com")
@@ -195,6 +195,31 @@ class TestApp(unittest.TestCase):
         self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["materias"][0]["dias_estudo"],
                          [int(outro_dia)])
 
+    def test_dia_vazio_adianta_e_mapa_sem_nao_estudados(self):
+        from datetime import date, timedelta
+        hoje = date.today()
+        self.criar_usuario("v@z.com")
+        cfg = {"ritmo": "leve", "aprendizado": "padrao", "teto_dias": "45", "modo": "completa",
+               "revisao_minima": "2", "questoes_modo": "auto", "questoes_fixas": "10"}
+        self.post("/configuracoes", dict(cfg, adiantar="1"), "/configuracoes")
+        self.post("/materias/nova", {"nome": "SAT"}, "/materias")
+        self.post("/assuntos/novo", {"nome": "Algebra", "materia_id": "1"}, "/materias")
+        self.post("/assuntos/novo", {"nome": "Geometria", "materia_id": "1"}, "/materias")
+        # acertou tudo ontem: nada vence hoje
+        self.post("/sessoes/nova", {"assunto_id": "1", "data": (hoje - timedelta(days=1)).isoformat(),
+                                    "acertos": "10", "total": "10"}, "/sessoes/nova")
+        html = self.c.get("/hoje").get_data(as_text=True)
+        self.assertIn("adiantamos 1 revisão", html)
+        self.assertIn("adiantado", html)
+        # desligado: nada é adiantado
+        self.post("/configuracoes", dict(cfg, adiantar="0"), "/configuracoes")
+        self.assertNotIn("adiantamos", self.c.get("/hoje").get_data(as_text=True))
+        # mapa: só estudados, sem a lista de "ainda não estudados"
+        mapa = self.c.get("/mapa").get_data(as_text=True)
+        self.assertIn("Algebra", mapa)
+        self.assertNotIn("Geometria", mapa)
+        self.assertIn("1 assunto ainda não começado", mapa)
+
     def test_pwa(self):
         r = self.c.get("/manifest.webmanifest")
         self.assertEqual(r.status_code, 200)
@@ -213,6 +238,7 @@ class TestApp(unittest.TestCase):
         cfg = self.c.get("/configuracoes/exportar").get_json()["configuracoes"]
         self.assertEqual((cfg["ritmo"], cfg["aprendizado"]), ("intenso", "degraus"))
         self.assertEqual(cfg["teto_dias"], 30)          # sem resposta: usa a sugestão
+        self.assertNotIn("(ritmo leve)", self.c.get("/configuracoes").get_data(as_text=True))
         # teto fora do intervalo permitido é recusado
         self.c.post("/configuracoes", data={
             "csrf_token": self.token("/configuracoes"), "ritmo": "intenso", "aprendizado": "degraus",

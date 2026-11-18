@@ -12,7 +12,7 @@
 
 {% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
 
-{% macro contagem(a) %}{% if a.filhos %}{{ a.filhos | length }} subassunto{{ 's' if a.filhos | length > 1 }}{% else %}{{ a.n_sessoes }} sess{{ 'ão' if a.n_sessoes == 1 else 'ões' }}{% endif %}{% endmacro %}
+{% macro contagem(a) %}{% if a.filhos %}{{ a.filhos | length }} subassunto{{ 's' if a.filhos | length > 1 }}{% else %}{{ a.n_sessoes }} prática{{ '' if a.n_sessoes == 1 else 's' }}{% endif %}{% endmacro %}
 
 {% macro dias_txt(dias) %}{% if not dias %}Todo dia{% else %}{% for d in dias %}{{ NOMES_DIAS[d][:3] }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}{% endmacro %}
 
@@ -30,7 +30,7 @@
     <button class="ed-salvar">Salvar</button>
   </form>
   <form method="post" action="{{ url_for('excluir_assunto', aid=a.id) }}"
-        data-confirmar="Excluir “{{ a.nome }}”{% if a.filhos %} e seus {{ a.filhos | length }} subassuntos{% endif %}{% if a.n_sessoes %} ({{ a.n_sessoes }} sessões){% endif %}? Isso não pode ser desfeito.">
+        data-confirmar="Excluir “{{ a.nome }}”{% if a.filhos %} e seus {{ a.filhos | length }} subassuntos{% endif %}{% if a.n_sessoes %} ({{ a.n_sessoes }} práticas){% endif %}? Isso não pode ser desfeito.">
     {{ csrf() }}<input type="hidden" name="editando" value="1">
     <button class="ed-excluir" title="Excluir {{ a.nome }}" aria-label="Excluir {{ a.nome }}">×</button>
   </form>
@@ -66,7 +66,7 @@
   <header class="sec-cab">
     <div class="sec-titulo">
       <h2>{{ m.nome }}</h2>
-      <span class="sec-meta">{{ m.folhas | length }} assunto{{ 's' if m.folhas | length != 1 }} · {{ m.folhas | sum(attribute='n_sessoes') }} sessões</span>
+      <span class="sec-meta">{{ m.folhas | length }} assunto{{ 's' if m.folhas | length != 1 }} · {{ m.folhas | sum(attribute='n_sessoes') }} práticas</span>
       <span class="sec-dias" title="Dias em que esta seção entra na revisão">{{ dias_txt(m.dias_estudo) }}</span>
     </div>
     <a class="btn btn-fantasma btn-p sec-editar" href="{{ url_for('materias', editar=m.id) }}#materia-{{ m.id }}" data-alternar-edicao>Editar seção</a>
@@ -127,7 +127,7 @@
 
       {# edição: criar subassunto #}
       <form method="post" action="{{ url_for('criar_assunto') }}" class="so-edicao ed-novo"
-            {% if a.n_sessoes and not a.filhos %}data-confirmar="“{{ a.nome }}” já tem {{ a.n_sessoes }} sessões. Elas ficam no histórico, mas as revisões passam a ser feitas nos subassuntos. Continuar?"{% endif %}>
+            {% if a.n_sessoes and not a.filhos %}data-confirmar="“{{ a.nome }}” já tem {{ a.n_sessoes }} práticas. Elas ficam no histórico, mas as revisões passam a ser feitas nos subassuntos. Continuar?"{% endif %}>
         {{ csrf() }}<input type="hidden" name="editando" value="1"><input type="hidden" name="materia_id" value="{{ m.id }}">
         <input type="hidden" name="parent_id" value="{{ a.id }}">
         <input type="text" name="nome" placeholder="+ subassunto" required maxlength="160" aria-label="Novo subassunto de {{ a.nome }}">
@@ -151,7 +151,7 @@
 
   {# edição: excluir a seção inteira #}
   <form method="post" action="{{ url_for('excluir_materia', mid=m.id) }}" class="so-edicao sec-excluir"
-        data-confirmar="Excluir a seção “{{ m.nome }}” com todos os assuntos e sessões? Isso não pode ser desfeito.">
+        data-confirmar="Excluir a seção “{{ m.nome }}” com todos os assuntos e práticas? Isso não pode ser desfeito.">
     {{ csrf() }}
     <button class="link-p perigo">Excluir a seção “{{ m.nome }}”</button>
   </form>

@@ -2,7 +2,7 @@
    Permite instalar o app e mostra uma página simples quando não há internet.
    Estratégia "rede primeiro": sempre busca a versão mais nova no servidor e só
    usa o cache se a rede falhar, então uma atualização do site aparece na hora. */
-const CACHE = 'revisa-v1';
+const CACHE = 'revisa-v2';
 const ESSENCIAIS = ['/static/css/estilo.css', '/static/js/app.js', '/static/favicon.svg', '/offline'];
 
 self.addEventListener('install', (ev) => {
