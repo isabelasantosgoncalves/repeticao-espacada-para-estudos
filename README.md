@@ -15,7 +15,7 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 ## Funcionalidades
 
 - **Contas de usuário**: cadastro, login e logout, senhas com hash. Cada usuário só vê e edita os próprios dados (checado no backend em todas as rotas).
-- **Onboarding** no primeiro acesso, antes de entrar no app: ritmo de estudo, fase de aprendizado, modo de revisão, dia(s) fixo(s), revisão mínima diária e questões por assunto.
+- **Onboarding** no primeiro acesso, antes de entrar no app: ritmo de estudo, fase de aprendizado, máximo de dias sem revisão, modo de revisão, dia(s) fixo(s), revisão mínima diária e questões por assunto.
 - **Hoje (painel)**: números do dia (revisões feitas, questões sugeridas, atrasados, domínio médio), a lista de revisões com registro direto na linha (acertos + Enter), a agenda dos próximos 7 dias e o progresso nos assuntos ainda não começados.
 - **Registrar sessão**: formulário rápido (matéria → assunto, data, acertos, total, observação).
 - **Mapa de domínio**: assuntos por matéria com barra colorida (vermelho < 50%, amarelo 50–84%, verde ≥ 85%), separados em *Revisar agora*, *Pode esperar* e *Dominado*.
@@ -78,7 +78,7 @@ A tabela é aplicada ao **domínio** (e não só à última sessão), então a m
 | 85–94%   | 15 dias         | 6        |
 | ≥ 95%    | 30 dias         | 4        |
 
-- **Bônus**: com 2 ou mais sessões seguidas ≥ 85% (e domínio ≥ 85%), o intervalo anterior **dobra** a cada nova sessão boa (15 → 30 → 60 …). O intervalo nunca fica abaixo do da tabela e tem um teto de segurança de 180 dias.
+- **Bônus**: com 2 ou mais sessões seguidas ≥ 85% (e domínio ≥ 85%), o intervalo anterior **dobra** a cada nova sessão boa (15 → 30 → 60 …). O intervalo nunca fica abaixo do da tabela e é limitado pelo máximo de dias escolhido pelo usuário (no máximo 1 ano).
   - O bônus é proporcional ao tamanho da sessão: só dobra se você fez pelo menos as questões sugeridas. Com menos, cresce na proporção (`1 + feitas/sugeridas`): acertar 1 de 1 quando o app sugeria 6 leva 30 dias para 35, não para 60.
 - Uma sessão abaixo de 85% encerra a sequência, e o intervalo volta ao da tabela para o domínio atual.
 - Se o usuário escolheu **número fixo** de questões, ele substitui a coluna "Questões".
@@ -118,6 +118,13 @@ Se a sessão vai mal, a tabela já dá um intervalo menor que o teto, e ele vale
 
 Como tudo é calculado a partir do histórico, trocar o ritmo recalcula na hora as datas de todos os
 assuntos.
+
+**Máximo de dias sem revisão.** Por mais que o bônus cresça, nenhum assunto fica mais tempo sem
+revisão do que o teto escolhido pelo usuário. No onboarding o app sugere um valor pelas respostas
+(ritmo Leve 60, Moderado 45, Intenso 30; "esqueço rápido" −15, "já tenho base" +15), e a pessoa
+pode aceitar ou trocar (30, 45, 60, 90 ou qualquer número entre 7 e 365). A opção **Livre (até 1 ano)**
+é para quem estuda a longo prazo, sem prova marcada: a cada revisão bem-feita o intervalo dobra
+(30 → 60 → 120 → 240 dias) até no máximo 365.
 
 ### 3. Esquecimento
 

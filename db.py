@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS configuracoes (
     questoes_modo   TEXT    NOT NULL DEFAULT 'auto',    -- auto | fixo
     questoes_fixas  INTEGER NOT NULL DEFAULT 10,
     ritmo           TEXT    NOT NULL DEFAULT 'leve',    -- leve | moderado | intenso
-    aprendizado     TEXT    NOT NULL DEFAULT 'padrao'   -- cautelosa | degraus | padrao | solta
+    aprendizado     TEXT    NOT NULL DEFAULT 'padrao',  -- cautelosa | degraus | padrao | solta
+    teto_dias       INTEGER NOT NULL DEFAULT 45         -- máximo de dias sem revisar um assunto
 );
 
 CREATE TABLE IF NOT EXISTS materias (
@@ -99,6 +100,8 @@ def iniciar_db(caminho: str):
         con.execute("ALTER TABLE configuracoes ADD COLUMN ritmo TEXT NOT NULL DEFAULT 'leve'")
     if "aprendizado" not in colunas:
         con.execute("ALTER TABLE configuracoes ADD COLUMN aprendizado TEXT NOT NULL DEFAULT 'padrao'")
+    if "teto_dias" not in colunas:
+        con.execute("ALTER TABLE configuracoes ADD COLUMN teto_dias INTEGER NOT NULL DEFAULT 45")
     con.commit()
     con.close()
 

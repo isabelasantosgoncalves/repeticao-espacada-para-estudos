@@ -122,6 +122,47 @@
     atualizar();
   };
 
+  // Teto de dias: sugere um valor pelo ritmo e pela fase de aprendizado.
+  // `auto` (onboarding): o campo acompanha a sugestão até a pessoa escolher outro valor.
+  Revisa.teto = function (form, auto) {
+    var box = form && form.querySelector('[data-teto]');
+    if (!box) return;
+    var sugestoes = JSON.parse(box.getAttribute('data-sugestoes'));
+    var campo = box.querySelector('input[name="teto_dias"]');
+    var alvo = box.querySelector('[data-sugestao]');
+    var escolhido = !auto;
+
+    function valor(nome, padrao) {
+      var r = form.querySelector('input[name="' + nome + '"]:checked');
+      return r ? r.value : padrao;
+    }
+    function sugestao() {
+      var porRitmo = sugestoes[valor('ritmo', 'leve')] || {};
+      return porRitmo[valor('aprendizado', 'padrao')] || 45;
+    }
+    function marcar() {
+      box.querySelectorAll('.chip-teto').forEach(function (b) {
+        b.classList.toggle('on', b.getAttribute('data-valor') === String(campo.value));
+      });
+    }
+    function atualizar() {
+      var s = sugestao();
+      alvo.textContent = s;
+      if (!escolhido) campo.value = s;
+      marcar();
+    }
+    box.addEventListener('click', function (ev) {
+      var chip = ev.target.closest('.chip-teto');
+      if (chip) { campo.value = chip.getAttribute('data-valor'); escolhido = true; marcar(); }
+      if (ev.target.closest('[data-usar-sugestao]')) { campo.value = sugestao(); escolhido = !auto; marcar(); }
+    });
+    campo.addEventListener('input', function () { escolhido = true; marcar(); });
+    form.addEventListener('change', function (ev) {
+      if (ev.target.name === 'ritmo' || ev.target.name === 'aprendizado') atualizar();
+    });
+    atualizar();
+  };
+
   // Registrar sessão: matéria -> assunto.
   Revisa.seletorAssunto = function () {
     var selM = document.getElementById('sel-materia');

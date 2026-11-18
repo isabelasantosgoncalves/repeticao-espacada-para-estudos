@@ -38,7 +38,7 @@ TABELA = (
 
 LIMIAR_BOM = 0.85          # sessões >= 85% contam para o bônus
 QUESTOES_REFERENCIA = 10   # a partir de 10 questões a sessão tem peso cheio no domínio
-INTERVALO_MAXIMO = 180     # teto de segurança para o bônus (dias)
+INTERVALO_MAXIMO = 365     # limite absoluto do bônus: 1 ano (opção "Livre" do usuário)
 PERDA_POR_SEMANA = 0.05    # esquecimento: -5 pontos percentuais por semana de atraso
 PESO_ATRASO = 0.1          # cada dia de atraso soma 0,1 na prioridade
 
@@ -58,6 +58,24 @@ FASES_APRENDIZADO = {
 
 def tetos_da_fase(nome: str | None) -> tuple[int, ...]:
     return FASES_APRENDIZADO.get(nome or "padrao", TETOS_APRENDIZADO)
+
+
+# Teto escolhido pelo usuário: máximo de dias que um assunto fica sem revisão.
+TETO_PADRAO = 45
+TETO_MIN, TETO_MAX = 7, 365
+TETO_LIVRE = 365           # "Livre (até 1 ano)": para quem estuda a longo prazo, sem prova
+TETO_POR_RITMO = {"leve": 60, "moderado": 45, "intenso": 30}
+AJUSTE_TETO_FASE = {"cautelosa": -15, "solta": 15}
+
+
+def sugerir_teto(ritmo: str | None, aprendizado: str | None) -> int:
+    """
+    Sugestão de teto a partir das respostas do onboarding:
+    ritmo (leve 60, moderado 45, intenso 30) ajustado pela fase de
+    aprendizado ("esqueço rápido" -15, "já tenho base" +15).
+    """
+    base = TETO_POR_RITMO.get(ritmo or "leve", TETO_PADRAO)
+    return max(21, min(90, base + AJUSTE_TETO_FASE.get(aprendizado or "", 0)))
 
 # Ritmo de estudo: multiplica o intervalo final. Quem faz mais questões
 # (fase só de questões) revisa com mais frequência.
@@ -147,6 +165,7 @@ def calcular_intervalo(
     questoes_fixas: int | None = None,
     tetos: tuple[int, ...] = TETOS_APRENDIZADO,
     fator: float = 1.0,
+    teto: int | None = None,
 ) -> tuple[int, int]:
     """
     Intervalo (em dias) até a próxima revisão e o tamanho da sequência boa atual.
@@ -166,6 +185,7 @@ def calcular_intervalo(
       fica limitado a tetos[n-1]. O bônus seguinte parte do valor limitado,
       então um assunto novo cresce aos poucos (7 -> 15 -> 30 -> 60).
     - Ritmo: no fim, o intervalo é multiplicado por `fator` (mínimo 1 dia).
+    - Teto do usuário: o resultado final nunca passa de `teto` dias.
     """
     if not percentuais:
         raise ValueError("é preciso ao menos uma sessão")
@@ -186,7 +206,10 @@ def calcular_intervalo(
         if i < len(tetos):
             intervalo = min(intervalo, tetos[i])
         sugeridas = questoes_sugeridas(dom, questoes_fixas)
-    return aplicar_ritmo(intervalo, fator), sequencia
+    final = aplicar_ritmo(intervalo, fator)
+    if teto:
+        final = min(final, teto)
+    return final, sequencia
 
 
 def aplicar_ritmo(intervalo: int, fator: float) -> int:
@@ -262,6 +285,7 @@ def analisar_assunto(
     questoes_fixas: int | None = None,
     fator: float = 1.0,
     tetos: tuple[int, ...] = TETOS_APRENDIZADO,
+    teto: int | None = None,
 ) -> EstadoAssunto | None:
     """
     Calcula o estado de um assunto a partir das suas sessões.
@@ -275,7 +299,7 @@ def analisar_assunto(
     totais = [total for _, _, total in sessoes]
 
     dom = dominio(pcts, totais)
-    intervalo, sequencia = calcular_intervalo(pcts, totais, questoes_fixas, tetos=tetos, fator=fator)
+    intervalo, sequencia = calcular_intervalo(pcts, totais, questoes_fixas, tetos=tetos, fator=fator, teto=teto)
     ultima_data = sessoes[-1][0]
     proxima = ultima_data + timedelta(days=intervalo)
     atraso = dias_de_atraso(proxima, hoje)

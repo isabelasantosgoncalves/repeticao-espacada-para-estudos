@@ -184,6 +184,13 @@ class TestApp(unittest.TestCase):
             "modo": "diaria", "revisao_minima": "3", "questoes_modo": "auto", "questoes_fixas": "10"})
         cfg = self.c.get("/configuracoes/exportar").get_json()["configuracoes"]
         self.assertEqual((cfg["ritmo"], cfg["aprendizado"]), ("intenso", "degraus"))
+        self.assertEqual(cfg["teto_dias"], 30)          # sem resposta: usa a sugestão
+        # teto fora do intervalo permitido é recusado
+        self.c.post("/configuracoes", data={
+            "csrf_token": self.token("/configuracoes"), "ritmo": "intenso", "aprendizado": "degraus",
+            "teto_dias": "500", "modo": "diaria", "revisao_minima": "3", "questoes_modo": "auto",
+            "questoes_fixas": "10"})
+        self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["configuracoes"]["teto_dias"], 30)
         # valor inválido não é aceito
         self.c.post("/configuracoes", data={
             "csrf_token": self.token("/configuracoes"), "ritmo": "turbo", "aprendizado": "degraus",

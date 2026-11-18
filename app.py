@@ -142,7 +142,10 @@ def cor_dominio(valor: float) -> str:
 
 def registrar_filtros(app):
     app.jinja_env.filters.update(br=br, relativo=relativo, pct=pct, cor=cor_dominio)
-    app.jinja_env.globals.update(csrf_token=csrf_token, NOMES_DIAS=S.NOMES_DIAS)
+    # Sugestão de teto para cada combinação ritmo × fase (usada no onboarding/Configurações)
+    sugestoes = {r: {f: L.sugerir_teto(r, f) for f in L.FASES_APRENDIZADO} for r in L.RITMOS}
+    app.jinja_env.globals.update(csrf_token=csrf_token, NOMES_DIAS=S.NOMES_DIAS,
+                                 SUGESTOES_TETO=sugestoes, TETO_MIN=L.TETO_MIN, TETO_MAX=L.TETO_MAX)
 
 
 def ler_inteiro(valor, nome: str) -> int:
@@ -245,7 +248,7 @@ def registrar_rotas(app: Flask):
             if not enviado or not secrets.compare_digest(enviado, session.get("csrf", "")):
                 abort(400, "Sessão expirada. Recarregue a página e tente de novo.")
         # Onboarding obrigatório no primeiro acesso
-        livres = {"onboarding", "sair", "static", "landing", "manifest", "service_worker", "offline"}
+        livres = {"onboarding", "sair", "static", "landing", "demo", "manifest", "service_worker", "offline"}
         if (current_user.is_authenticated and not current_user.onboarding_ok
                 and request.endpoint not in livres):
             return redirect(url_for("onboarding"))
@@ -514,7 +517,8 @@ def registrar_rotas(app: Flask):
         cfg = S.carregar_config(db, current_user.id)
         estado = L.analisar_assunto(
             aid, [(date.fromisoformat(s["data"]), s["acertos"], s["total"]) for s in sessoes],
-            S.hoje(), S.questoes_fixas(cfg), fator=S.fator(cfg), tetos=S.tetos(cfg))
+            S.hoje(), S.questoes_fixas(cfg), fator=S.fator(cfg), tetos=S.tetos(cfg),
+            teto=cfg.get("teto_dias"))
         grafico = {"labels": [br(s["data"]) for s in sessoes],
                    "valores": [round(s["pct"] * 100, 1) for s in sessoes]}
 

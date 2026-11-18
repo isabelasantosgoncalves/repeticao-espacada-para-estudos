@@ -330,6 +330,29 @@ class TestEscolhaDaFase(unittest.TestCase):
         self.assertEqual(e.fase_total, 3)
 
 
+class TestTetoDoUsuario(unittest.TestCase):
+    def test_sugestao_pelas_respostas(self):
+        self.assertEqual(L.sugerir_teto("leve", "padrao"), 60)
+        self.assertEqual(L.sugerir_teto("moderado", "padrao"), 45)
+        self.assertEqual(L.sugerir_teto("intenso", "padrao"), 30)
+        self.assertEqual(L.sugerir_teto("leve", "cautelosa"), 45)
+        self.assertEqual(L.sugerir_teto("moderado", "solta"), 60)
+        self.assertEqual(L.sugerir_teto("intenso", "cautelosa"), 21)   # nunca abaixo de 21
+
+    def test_teto_limita_o_intervalo_final(self):
+        sess = [1.0] * 6
+        self.assertGreater(L.calcular_intervalo(sess, [10] * 6)[0], 45)
+        self.assertEqual(L.calcular_intervalo(sess, [10] * 6, teto=45)[0], 45)
+        self.assertEqual(L.calcular_intervalo(sess, [10] * 6, teto=30, fator=0.5)[0], 30)
+
+    def test_livre_dobra_ate_um_ano(self):
+        seq = [L.calcular_intervalo([1.0] * n, [10] * n, teto=L.TETO_LIVRE)[0] for n in range(3, 8)]
+        self.assertEqual(seq, [30, 60, 120, 240, 365])
+
+    def test_teto_nao_mexe_em_intervalo_curto(self):
+        self.assertEqual(L.calcular_intervalo([0.3], [10], teto=30)[0], 2)
+
+
 class TestRitmo(unittest.TestCase):
     def test_fatores(self):
         self.assertEqual(L.fator_do_ritmo("leve"), 1.0)

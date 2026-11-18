@@ -9,7 +9,7 @@
   <p class="sub">Algumas perguntas rápidas para montar suas revisões. Dá para mudar tudo depois em Configurações.</p>
 
   <ol class="progresso" aria-hidden="true">
-    <li class="on"></li><li></li><li></li><li></li><li></li><li></li>
+    <li class="on"></li><li></li><li></li><li></li><li></li><li></li><li></li>
   </ol>
 
   <form method="post" id="onboarding" class="form">
@@ -27,25 +27,31 @@
       {{ campos.aprendizado(cfg) }}
     </section>
 
+    <section class="passo" data-passo="teto" hidden>
+      <h2><span class="num">3</span> Qual o máximo de dias que um assunto pode ficar sem revisão?</h2>
+      <p class="sub">Quando você vai bem, os intervalos crescem. Este é o limite: a partir dele, o assunto volta de qualquer jeito.</p>
+      {{ campos.teto(cfg) }}
+    </section>
+
     <section class="passo" data-passo="modo" hidden>
-      <h2><span class="num">3</span> Quando você revisa?</h2>
+      <h2><span class="num">4</span> Quando você revisa?</h2>
       {{ campos.modo(cfg) }}
     </section>
 
     <section class="passo" data-passo="dias" hidden>
-      <h2><span class="num">4</span> Dia(s) da revisão fixa</h2>
+      <h2><span class="num">5</span> Dia(s) da revisão fixa</h2>
       <p class="sub">Nesses dias você faz a revisão grande: tudo que venceu e tudo que vence até o próximo dia fixo.</p>
       {{ campos.dias(cfg) }}
     </section>
 
     <section class="passo" data-passo="minima" hidden>
-      <h2><span class="num">5</span> Revisão mínima diária</h2>
+      <h2><span class="num">6</span> Revisão mínima diária</h2>
       <p class="sub">Quantos assuntos revisar nos dias comuns: o que você estudou ontem + os de menor domínio.</p>
       {{ campos.minima(cfg) }}
     </section>
 
     <section class="passo" data-passo="questoes" hidden>
-      <h2><span class="num">6</span> Questões por assunto</h2>
+      <h2><span class="num">7</span> Questões por assunto</h2>
       {{ campos.questoes(cfg) }}
     </section>
 
@@ -57,4 +63,4 @@
   </form>
 </div>
 {% endblock %}
-{% block scripts %}<script>Revisa.onboarding(document.getElementById('onboarding'));</script>{% endblock %}
+{% block scripts %}<script>Revisa.onboarding(document.getElementById('onboarding')); Revisa.teto(document.getElementById('onboarding'), true);</script>{% endblock %}

@@ -30,6 +30,23 @@
 </div>
 {% endmacro %}
 
+{% macro teto(cfg) %}
+<div class="teto" data-teto data-sugestoes='{{ SUGESTOES_TETO | tojson }}'>
+  <p class="teto-sugestao">De acordo com suas respostas, sugerimos <b data-sugestao>{{ cfg.teto_dias }}</b> dias.
+    <button type="button" class="link-p" data-usar-sugestao>Usar a sugestão</button></p>
+  <div class="teto-escolha">
+    {% for n in [30, 45, 60, 90] %}<button type="button" class="chip-teto" data-valor="{{ n }}">{{ n }} dias</button>{% endfor %}
+    <button type="button" class="chip-teto" data-valor="365" title="Para quem estuda a longo prazo, sem prova marcada">Livre (até 1 ano)</button>
+    <label class="teto-num">ou
+      <input type="number" name="teto_dias" min="{{ TETO_MIN }}" max="{{ TETO_MAX }}" value="{{ cfg.teto_dias }}" required aria-label="Máximo de dias sem revisão">
+      dias</label>
+  </div>
+  <p class="mini">Mesmo que você domine um assunto, ele volta para revisão pelo menos a cada esse número de dias.
+    <b>Livre:</b> para quem estuda a longo prazo, sem prova marcada. A cada revisão bem-feita o intervalo dobra
+    (30 → 60 → 120 → 240 dias), até no máximo 1 ano.</p>
+</div>
+{% endmacro %}
+
 {% macro modo(cfg) %}
 <div class="opcoes" data-grupo="modo">
   {% for valor, titulo, desc in [

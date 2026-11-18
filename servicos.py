@@ -125,7 +125,8 @@ def estados(db, uid: int, dia: date, cfg: dict, antes_de: date | None = None,
     for aid, sess in sessoes_por_assunto(db, uid, antes_de).items():
         if ids is not None and aid not in ids:
             continue
-        e = L.analisar_assunto(aid, sess, dia, fixas, fator=fator(cfg), tetos=tetos(cfg))
+        e = L.analisar_assunto(aid, sess, dia, fixas, fator=fator(cfg), tetos=tetos(cfg),
+                               teto=cfg.get("teto_dias"))
         if e:
             res[aid] = e
     return res
@@ -281,6 +282,7 @@ def exportar(db, uid: int) -> dict:
             "questoes_fixas": cfg["questoes_fixas"],
             "ritmo": cfg["ritmo"],
             "aprendizado": cfg["aprendizado"],
+            "teto_dias": cfg["teto_dias"],
         },
         "materias": materias,
     }
@@ -395,9 +397,13 @@ def validar_config(form: dict) -> dict:
     aprendizado = form.get("aprendizado") or "padrao"
     if aprendizado not in L.FASES_APRENDIZADO:
         raise ValueError("Escolha uma opção válida para assuntos novos.")
+    teto = form.get("teto_dias")
+    teto = int(teto) if teto not in (None, "") else L.sugerir_teto(ritmo, aprendizado)
+    if not L.TETO_MIN <= teto <= L.TETO_MAX:
+        raise ValueError(f"O máximo de dias sem revisão deve ficar entre {L.TETO_MIN} e {L.TETO_MAX}.")
     return {"modo": modo, "dias_fixos": dias, "revisao_minima": minima,
             "questoes_modo": qmodo, "questoes_fixas": qfixas, "ritmo": ritmo,
-            "aprendizado": aprendizado}
+            "aprendizado": aprendizado, "teto_dias": teto}
 
 
 def salvar_config(db, uid: int, dados: dict, commit: bool = True):
@@ -405,8 +411,9 @@ def salvar_config(db, uid: int, dados: dict, commit: bool = True):
     carregar_config(db, uid)  # garante que a linha existe
     db.execute(
         """UPDATE configuracoes SET modo = ?, dias_fixos = ?, revisao_minima = ?,
-           questoes_modo = ?, questoes_fixas = ?, ritmo = ?, aprendizado = ? WHERE usuario_id = ?""",
+           questoes_modo = ?, questoes_fixas = ?, ritmo = ?, aprendizado = ?, teto_dias = ?
+           WHERE usuario_id = ?""",
         (c["modo"], ",".join(map(str, c["dias_fixos"])), c["revisao_minima"],
-         c["questoes_modo"], c["questoes_fixas"], c["ritmo"], c["aprendizado"], uid))
+         c["questoes_modo"], c["questoes_fixas"], c["ritmo"], c["aprendizado"], c["teto_dias"], uid))
     if commit:
         db.commit()

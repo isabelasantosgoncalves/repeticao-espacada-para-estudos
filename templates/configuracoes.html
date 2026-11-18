@@ -15,6 +15,9 @@
   <p class="sub">Fase de aprendizado: quantas vezes um assunto novo volta antes de seguir a tabela normal.</p>
   {{ campos.aprendizado(cfg) }}
 
+  <h2>Máximo de dias sem revisão</h2>
+  {{ campos.teto(cfg) }}
+
   <h2>Quando você revisa</h2>
   {{ campos.modo(cfg) }}
 
@@ -49,4 +52,4 @@
   </form>
 </section>
 {% endblock %}
-{% block scripts %}<script>Revisa.config(document.getElementById('form-config'));</script>{% endblock %}
+{% block scripts %}<script>Revisa.config(document.getElementById('form-config')); Revisa.teto(document.getElementById('form-config'), false);</script>{% endblock %}
