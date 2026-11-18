@@ -4,7 +4,6 @@
 {% block conteudo %}
 <div class="painel">
   <h1>{{ 'Editar prática' if sessao else 'Registrar prática' }}</h1>
-  <p class="sub">Anote quantas questões você fez e quantas acertou.</p>
 
   {% if not materias or not (materias | map(attribute='folhas') | select | list) %}
   <div class="vazio">
@@ -43,7 +42,7 @@
       </label>
     </div>
     <p class="previa" data-previa></p>
-    <label>Observação <small>(opcional, não entra nos cálculos)</small>
+    <label>Observação <small>(opcional)</small>
       <textarea name="observacao" rows="3" maxlength="1000" placeholder="Ex.: errei por falta de atenção">{{ v.observacao }}</textarea>
     </label>
     <div class="acoes">

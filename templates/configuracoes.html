@@ -7,33 +7,39 @@
 
 <form method="post" class="painel form" id="form-config">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
   <h2>Ritmo de estudo</h2>
-  <p class="sub">Define de quanto em quanto tempo cada assunto volta. Quanto mais intenso, mais cedo ele volta. Ao trocar, as datas de todos os assuntos são recalculadas na hora.</p>
+  <p class="sub">Quanto mais intenso, mais cedo cada assunto volta para revisão. Ao trocar, as datas de todos os assuntos são recalculadas.</p>
   {{ campos.ritmo(cfg) }}
 
   <h2>Assuntos novos</h2>
-  <p class="sub">Fase de aprendizado: quantas vezes um assunto novo volta antes de seguir a tabela normal.</p>
+  <p class="sub">Nas primeiras práticas o assunto volta mais cedo, para fixar. A sequência de cada opção vale quando você acerta tudo.
+    Resultado médio (50 a 84%) volta na metade do tempo; abaixo de 50%, no dia seguinte.</p>
   {{ campos.aprendizado(cfg) }}
 
   <h2>Máximo de dias sem revisão</h2>
+  <p class="sub">Mesmo dominado, nenhum assunto fica mais tempo que isso sem revisão.
+    <b>Livre</b> deixa o intervalo dobrar até 1 ano, para quem estuda a longo prazo, sem prova marcada.</p>
   {{ campos.teto(cfg) }}
+
+  <h2>Seções na semana</h2>
+  <p class="sub">Se todas as seções entram na revisão todo dia ou só nos dias de cada uma.</p>
+  {{ campos.distribuicao(cfg) }}
 
   <h2>Quando você revisa</h2>
   {{ campos.modo(cfg) }}
 
   <div data-secao="dias">
-    <h2>Dia(s) da revisão fixa</h2>
+    <h2>Dia fixo</h2>
+    <p class="sub">Nesse dia entra tudo que venceu e o que vence até o próximo dia fixo.</p>
     {{ campos.dias(cfg) }}
   </div>
 
   <div data-secao="minima">
-    <h2>Revisão mínima diária</h2>
+    <h2>Limite por seção</h2>
+    <p class="sub">Máximo de assuntos de cada seção na revisão do dia. Entram primeiro os que mais precisam.</p>
     {{ campos.minima(cfg) }}
   </div>
-
-  <h2>Dias sem nenhuma revisão</h2>
-  <p class="sub">No começo, com poucos assuntos, alguns dias ficam vazios. Nesses dias o app adianta as revisões mais próximas, para você não ficar parado.</p>
-  {{ campos.adiantar(cfg) }}
 
   <h2>Questões por assunto</h2>
   {{ campos.questoes(cfg) }}
@@ -43,7 +49,7 @@
 
 <section class="painel">
   <h2>Seus dados</h2>
-  <p class="sub">Baixe um arquivo JSON com seções, assuntos, práticas e configurações. Serve como backup ou para levar seus dados entre a versão local e a online.</p>
+  <p class="sub">Backup em JSON com seções, assuntos, práticas e configurações.</p>
   <a class="btn btn-sec" href="{{ url_for('exportar') }}">Exportar meus dados</a>
 
   <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" class="form importar">

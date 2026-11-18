@@ -15,7 +15,7 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 ## Funcionalidades
 
 - **Contas de usuário**: cadastro, login e logout, senhas com hash. Cada usuário só vê e edita os próprios dados (checado no backend em todas as rotas).
-- **Onboarding** no primeiro acesso, antes de entrar no app: ritmo de estudo, fase de aprendizado, máximo de dias sem revisão, modo de revisão, dia(s) fixo(s), revisão mínima diária e questões por assunto.
+- **Onboarding** no primeiro acesso, antes de entrar no app: ritmo de estudo, fase de aprendizado, máximo de dias sem revisão, como as seções se distribuem na semana, modo de revisão, dia fixo, limite por seção e questões por assunto.
 - **Hoje (painel)**: números do dia (revisões feitas, questões sugeridas, atrasados, domínio médio), a lista de revisões com registro direto na linha (acertos + Enter), uma prévia de **amanhã**, os **vencimentos** dos próximos 7 dias e o progresso nos assuntos ainda não começados.
 - **Registrar prática**: formulário rápido (seção → assunto, data, acertos, total, observação).
 - **Mapa de domínio**: uma lista só, por seção, com barra colorida (vermelho < 50%, amarelo 50–84%, verde ≥ 85%) e o status de cada assunto. Os contadores do topo (*Revisar agora*, *Pode esperar*, *Dominado*) servem de filtro.
@@ -95,8 +95,8 @@ A tabela é aplicada ao **domínio** (e não só à última prática), então a 
 Uma prática pequena e ruim mexe pouco; várias seguidas levam o assunto para o fundo da tabela.
 
 **Fase de aprendizado.** Um assunto novo não vai direto para 30 dias, mesmo com 100% de acerto:
-nas primeiras práticas o intervalo tem um teto. Como o bônus parte do valor limitado, quem acerta
-tudo avança aos poucos. O usuário escolhe a opção no onboarding e em Configurações:
+nas primeiras práticas ele volta mais cedo, em degraus. O usuário escolhe a opção no onboarding e em
+Configurações. A sequência abaixo é para quando se acerta tudo:
 
 | Opção | Tetos | Acertando tudo |
 |---|---|---|
@@ -105,7 +105,13 @@ tudo avança aos poucos. O usuário escolhe a opção no onboarding e em Configu
 | Quero confirmar bem | 3, 7, 15 | 3 → 7 → 15 → 30 dias |
 | Já tenho base | 10, 20 | 10 → 20 → 40 dias |
 
-Se a prática vai mal, a tabela já dá um intervalo menor que o teto, e ele vale normalmente.
+Em cada degrau, o resultado decide quanto do teto vale:
+
+| Resultado (domínio) | Volta em | Ex.: "Quero confirmar bem" |
+|---|---|---|
+| Bom (≥ 85%) | o teto do degrau | 3 dias |
+| Médio (50 a 84%) | metade do teto, para cima | 2 dias |
+| Mal (< 50%) | 1 dia | 1 dia |
 
 **Ritmo de estudo.** Escolhido no onboarding e em Configurações, multiplica o intervalo final
 (inclusive bônus e fase de aprendizado):
@@ -146,24 +152,19 @@ Assuntos com domínio baixo e assuntos atrasados sobem na fila. As revisões sã
 
 | Modo | No dia fixo | Nos outros dias |
 |---|---|---|
-| Todo dia, tudo que vencer | — | Revisão completa: tudo que vence ou atrasou, sem limite |
-| Todo dia, poucos assuntos | — | Revisão mínima |
-| Um dia fixo na semana | Revisão grande | Sem revisão (só assunto novo) |
-| Dia fixo + poucos assuntos | Revisão grande | Revisão mínima |
+| Todo dia, o que vencer (com limite) | — | O que venceu, até N por seção |
+| Todo dia, tudo que vencer | — | Tudo que venceu, sem limite |
+| Só no dia fixo | Revisão grande | Sem revisão |
+| Dia fixo + limite nos outros dias | Revisão grande | O que venceu, até N por seção |
 
-- **Dia vazio:** se num dia nada vence (comum no começo, com poucos assuntos), o app **adianta** as revisões mais próximas (1 por padrão; 0 a 3 em Configurações), marcadas como "adiantado".
-
-O modo "tudo que vencer" é pensado para a fase só de questões (ritmo Intenso): no onboarding,
-ele já vem sugerido quando a pessoa escolhe esse ritmo.
-
-- **Revisão mínima diária**: o assunto estudado ontem + os assuntos de menor domínio efetivo, até completar N assuntos (padrão 2). Se o assunto de ontem também é o de menor domínio, ele entra uma vez só e a vaga vai para o próximo.
+- **Limite por seção**: entra só o que já venceu, até N assuntos **de cada seção** (padrão 2), começando pelos que mais precisam (maior prioridade). O que passar do limite continua vencido e entra nos dias seguintes. Nada é revisado antes do vencimento: esperar o momento certo faz parte da repetição espaçada.
 - **Revisão grande**: tudo que já venceu e não foi feito + tudo que vence antes do próximo dia fixo, por prioridade, sem limite de questões.
 - A seleção do dia usa só as práticas **anteriores a hoje**, então a lista não muda enquanto você registra os resultados; o que já foi feito aparece marcado.
 - A **observação** de cada prática é só um registro: não entra em nenhum cálculo.
 
 ### 6. Dias de estudo por seção
 
-Cada seção pode ser estudada todo dia ou só em alguns dias (ex.: SAT todo dia, teoria musical
+Quem escolhe "Cada seção tem seus dias" define, para cada seção, se ela é estudada todo dia ou só em alguns dias (ex.: SAT todo dia, teoria musical
 seg/qua/sex). Nos outros dias, os assuntos dela não entram na revisão. E se uma revisão cairia
 num dia sem estudo daquela seção, ela passa para o próximo dia de estudo **sem contar como atraso**,
 então o esquecimento e a prioridade não punem os dias de folga daquela seção.

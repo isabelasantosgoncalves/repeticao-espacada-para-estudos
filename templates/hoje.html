@@ -49,14 +49,12 @@
       <div>
         <h2>Revisões de hoje</h2>
         <p class="sub">
-          {% if tipo == 'grande' %}Dia de revisão grande: tudo que venceu + o que vence até {{ proximo_fixo | br }}.
-          {% elif tipo == 'completa' %}Tudo que vence hoje ou está atrasado, do mais urgente para o menos.
-          {% elif tipo == 'diaria' %}Revisão mínima: o assunto de ontem + os de menor domínio (até {{ cfg.revisao_minima }} assuntos, mesmo que ainda não tenham vencido).
-          {% else %}Sem revisão hoje.{% if proximo_fixo %} A próxima revisão grande é {{ NOMES_DIAS[proximo_fixo.weekday()] | lower }}, {{ proximo_fixo | br }}.{% endif %}
+          {% if tipo == 'grande' %}Revisão grande
+          {% elif tipo == 'completa' %}Tudo que venceu
+          {% elif tipo == 'diaria' %}O que venceu · até {{ cfg.revisao_minima }} por seção
+          {% else %}Hoje não tem revisão{% if proximo_fixo %} · próxima em {{ proximo_fixo | br }}{% endif %}
           {% endif %}
-          {% if n_adiantadas %}<span class="adiantadas">Nada vencia hoje, então adiantamos {{ n_adiantadas }} revisão{{ 'ões' if n_adiantadas > 1 }} que estava{{ 'm' if n_adiantadas > 1 }} perto da data.</span>{% endif %}
-          {% if revisao %}Digite os acertos e aperte Enter para registrar.{% endif %}
-          {% if pausadas %}<span class="pausadas">Hoje não é dia de: {{ pausadas | join(', ') }}.</span>{% endif %}
+          {% if pausadas %}· fora hoje: {{ pausadas | join(', ') }}{% endif %}
         </p>
       </div>
     </div>
@@ -68,8 +66,7 @@
         <div class="rev-info">
           <a class="rev-nome" href="{{ url_for('historico', aid=a.id) }}">{{ a.nome }}</a>
           <small>{{ a.materia }}{% if a.pai %} · {{ a.pai }}{% endif %}
-            {% if e.atraso %} · <span class="txt-vermelho">{{ e.atraso }} dia{{ 's' if e.atraso > 1 }} de atraso</span>{% endif %}
-            {% if item.adiantado %} · <span class="tag tag-leve">adiantado · vencia {{ e.proxima_revisao | br }}</span>{% endif %}</small>
+            {% if e.atraso %} · <span class="txt-vermelho">{{ e.atraso }} dia{{ 's' if e.atraso > 1 }} de atraso</span>{% endif %}</small>
           <span class="barra"><i class="{{ e.dominio_efetivo | cor }}" style="width: {{ (e.dominio_efetivo * 100) | round }}%"></i></span>
           <small class="rev-dom">{{ e.dominio_efetivo | pct }} de domínio · {% if e.atraso %}venceu {{ e.proxima_revisao | br }}{% elif e.proxima_revisao == hoje_data %}vence hoje{% else %}vence {{ e.proxima_revisao | br }}{% endif %}</small>
         </div>
@@ -93,7 +90,7 @@
       {% endfor %}
     </ul>
     {% elif tipo %}
-    <p class="nada">Nada para revisar hoje. Aproveite para começar um assunto novo.</p>
+    <p class="nada">Nada venceu hoje.</p>
     {% endif %}
 
     <p class="rev-outra">Fez outro assunto? <a href="{{ url_for('nova_sessao') }}">Registrar outra prática</a></p>
@@ -122,7 +119,7 @@
       <p class="amanha-tipo">
         {% if amanha.tipo == 'grande' %}Revisão grande (dia fixo)
         {% elif amanha.tipo == 'completa' %}Tudo que vencer
-        {% elif amanha.tipo == 'diaria' %}Revisão mínima
+        {% elif amanha.tipo == 'diaria' %}O que vencer · até {{ cfg.revisao_minima }} por seção
         {% else %}Sem revisão{% endif %}
         {% if amanha.itens %} · {{ amanha.itens | length }} assunto{{ 's' if amanha.itens | length > 1 }} · {{ amanha.questoes }} questões{% endif %}
       </p>
@@ -131,7 +128,7 @@
         {% for item in amanha.itens[:5] %}{% set e = item.estado %}
         <li>
           <i class="ponto {{ e.dominio_efetivo | cor }}"></i>
-          <span>{{ item.assunto.nome }}{% if item.adiantado %} <small>(adiantado)</small>{% endif %}</span>
+          <span>{{ item.assunto.nome }}</span>
           <small>{{ e.questoes }} q</small>
         </li>
         {% endfor %}
@@ -154,10 +151,7 @@
         </li>
         {% endfor %}
       </ul>
-      <p class="mini">Quantos assuntos <b>vencem</b> (ficam na hora de revisar) em cada dia. Não é quanto você vai revisar:
-        {% if cfg.modo in ('diaria', 'ambos') %}nos dias comuns entram até {{ cfg.revisao_minima }} por dia{% if cfg.modo == 'ambos' %}, e o que vencer e não entrar fica para a revisão grande do dia fixo{% else %}, começando pelos de menor domínio{% endif %}.
-        {% elif cfg.modo == 'fixa' %}tudo isso entra na revisão grande do dia fixo.
-        {% else %}no seu modo, cada um entra na revisão no dia em que vence.{% endif %}</p>
+      <p class="mini">Assuntos que vencem em cada dia.</p>
       <a class="lat-rodape" href="{{ url_for('mapa') }}">Ver o mapa de domínio →</a>
     </section>
 

@@ -521,7 +521,7 @@ def registrar_rotas(app: Flask):
         estado = L.analisar_assunto(
             aid, [(date.fromisoformat(s["data"]), s["acertos"], s["total"]) for s in sessoes],
             S.hoje(), S.questoes_fixas(cfg), fator=S.fator(cfg), tetos=S.tetos(cfg),
-            teto=cfg.get("teto_dias"), dias_estudo=S.dias_por_assunto(db, current_user.id).get(aid))
+            teto=cfg.get("teto_dias"), dias_estudo=S.dias_por_assunto(db, current_user.id, cfg).get(aid))
         grafico = {"labels": [br(s["data"]) for s in sessoes],
                    "valores": [round(s["pct"] * 100, 1) for s in sessoes]}
 
@@ -551,6 +551,7 @@ def registrar_rotas(app: Flask):
     @login_required
     def materias():
         return render_template("materias.html", materias=materias_com_assuntos(current_user.id),
+                               cfg=S.carregar_config(banco.get_db(), current_user.id),
                                editando=request.args.get("editar", type=int))
 
     def executar(acao, ok_msg, mid=None):
@@ -586,7 +587,11 @@ def registrar_rotas(app: Flask):
         def acao():
             nome = nome_valido(request.form.get("nome"), "da seção", 120)
             # "Quando estudo esta seção": todo dia (vazio) ou dias escolhidos
-            dias = ""
+            # Sem o campo (pessoa estuda todas as seções todo dia): mantém o que já estava salvo
+            if "frequencia" not in request.form:
+                dias = banco.get_db().execute("SELECT dias_estudo FROM materias WHERE id = ?", (mid,)).fetchone()[0]
+            else:
+                dias = ""
             if request.form.get("frequencia") == "dias":
                 dias = ",".join(map(str, S.ler_dias(",".join(request.form.getlist("dias_estudo")))))
                 if not dias:

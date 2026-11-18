@@ -8,7 +8,7 @@
   <label class="opcao">
     <input type="radio" name="ritmo" value="{{ valor }}" {{ 'checked' if cfg.ritmo == valor }} required>
     <span><b>{{ titulo }}</b><small>{{ desc }}</small>
-      <small class="opcao-meta">Assunto que você domina volta em {{ forte }} · assunto em que você erra muito volta em {{ fraco }}</small></span>
+      <small class="opcao-meta">Assunto dominado volta em {{ forte }} · assunto fraco volta em {{ fraco }}</small></span>
   </label>
   {% endfor %}
 </div>
@@ -19,9 +19,9 @@
 <div class="opcoes" data-fases data-fatores='{{ FATORES_RITMO | tojson }}'>
   {% for valor, titulo, desc, seq in [
       ('padrao', 'Equilíbrio (recomendado)', 'Uma semana, depois quinze dias, depois o intervalo normal.', [7, 15, 30, 60]),
-      ('cautelosa', 'Esqueço rápido', 'O conteúdo é muito novo para mim ou costumo esquecer em poucos dias. Degraus curtos antes de espaçar.', [2, 4, 8, 15, 30]),
-      ('degraus', 'Quero confirmar bem', 'Prefiro revisar logo cedo, em três degraus, antes de espaçar.', [3, 7, 15, 30]),
-      ('solta', 'Já tenho base', 'Os assuntos não são totalmente novos; posso espaçar mais cedo.', [10, 20, 40])] %}
+      ('cautelosa', 'Esqueço rápido', 'Conteúdo muito novo ou que eu esqueço em poucos dias.', [2, 4, 8, 15, 30]),
+      ('degraus', 'Quero confirmar bem', 'Revisar logo cedo, em três degraus, antes de espaçar.', [3, 7, 15, 30]),
+      ('solta', 'Já tenho base', 'Os assuntos não são totalmente novos para mim.', [10, 20, 40])] %}
   <label class="opcao">
     <input type="radio" name="aprendizado" value="{{ valor }}" {{ 'checked' if cfg.aprendizado == valor }} required>
     <span><b>{{ titulo }}</b><small>{{ desc }}</small>
@@ -33,27 +33,30 @@
 
 {% macro teto(cfg) %}
 <div class="teto" data-teto data-sugestoes='{{ SUGESTOES_TETO | tojson }}'>
-  <p class="teto-sugestao">De acordo com suas respostas, sugerimos <b data-sugestao>{{ cfg.teto_dias }}</b> dias.
-    <button type="button" class="link-p" data-usar-sugestao>Usar a sugestão</button></p>
-  <div class="teto-escolha">
-    {% for n in [30, 45, 60, 90] %}<button type="button" class="chip-teto" data-valor="{{ n }}">{{ n }} dias</button>{% endfor %}
-    <button type="button" class="chip-teto" data-valor="365" title="Para quem estuda a longo prazo, sem prova marcada">Livre (até 1 ano)</button>
-    <label class="teto-num">ou
+  <div class="seg" role="group" aria-label="Máximo de dias sem revisão">
+    {% for n in [30, 45, 60, 90] %}
+    <button type="button" class="chip-teto seg-op" data-valor="{{ n }}"><b>{{ n }}</b><small>dias</small></button>
+    {% endfor %}
+    <button type="button" class="chip-teto seg-op" data-valor="365"><b>Livre</b><small>até 1 ano</small></button>
+  </div>
+  <div class="teto-rodape">
+    <label class="teto-num">Outro valor
       <input type="number" name="teto_dias" min="{{ TETO_MIN }}" max="{{ TETO_MAX }}" value="{{ cfg.teto_dias }}" required aria-label="Máximo de dias sem revisão">
       dias</label>
+    <span class="teto-sugestao">Sugestão para você: <b data-sugestao>{{ cfg.teto_dias }}</b> dias
+      <button type="button" class="link-p" data-usar-sugestao>usar</button></span>
   </div>
-  <p class="mini">Mesmo que você domine um assunto, ele volta para revisão pelo menos a cada esse número de dias.
-    <b>Livre:</b> para quem estuda a longo prazo, sem prova marcada. A cada revisão bem-feita o intervalo dobra
-    (30 → 60 → 120 → 240 dias), até no máximo 1 ano.</p>
 </div>
 {% endmacro %}
 
-{% macro adiantar(cfg) %}
-<div class="dias">
-  {% for n, rotulo in [(0, 'Não adiantar'), (1, '1 assunto'), (2, '2 assuntos'), (3, '3 assuntos')] %}
-  <label class="dia dia-largo">
-    <input type="radio" name="adiantar" value="{{ n }}" {{ 'checked' if cfg.adiantar == n }}>
-    <span>{{ rotulo }}</span>
+{% macro distribuicao(cfg) %}
+<div class="opcoes">
+  {% for valor, titulo, desc in [
+      ('todas', 'Estudo todas as seções todo dia', 'Ex.: SAT Math e SAT English, todos os dias.'),
+      ('dias', 'Cada seção tem seus dias', 'Ex.: ENEM, com Biologia seg/qua e Química ter/qui. Você marca os dias de cada seção na tela Seções.')] %}
+  <label class="opcao">
+    <input type="radio" name="distribuicao" value="{{ valor }}" {{ 'checked' if cfg.distribuicao == valor }} required>
+    <span><b>{{ titulo }}</b><small>{{ desc }}</small></span>
   </label>
   {% endfor %}
 </div>
@@ -62,10 +65,10 @@
 {% macro modo(cfg) %}
 <div class="opcoes" data-grupo="modo">
   {% for valor, titulo, desc in [
-      ('completa', 'Todo dia, tudo que vencer', 'Para a fase de questões: todo dia você revisa todos os assuntos que chegaram na data (ou atrasaram), do mais urgente para o menos. Sem limite.'),
-      ('diaria', 'Todo dia, poucos assuntos', 'Uma revisão curta diária: o assunto que você estudou ontem + os de menor domínio, até o número que você escolher.'),
-      ('fixa', 'Um dia fixo na semana', 'Uma revisão grande no(s) dia(s) que você escolher, com tudo que venceu e o que vence até a próxima.'),
-      ('ambos', 'Dia fixo + poucos assuntos', 'Revisão grande no dia fixo e a revisão curta nos outros dias.')] %}
+      ('diaria', 'Todo dia, o que vencer (com limite)', 'Revisa os assuntos que venceram, até o limite por seção. O que passar fica para os dias seguintes.'),
+      ('completa', 'Todo dia, tudo que vencer', 'Sem limite. Bom para a fase só de questões.'),
+      ('fixa', 'Só no dia fixo', 'Uma revisão grande por semana, com tudo que venceu.'),
+      ('ambos', 'Dia fixo + limite nos outros dias', 'Revisão grande no dia fixo; nos outros dias, o que vencer até o limite por seção.')] %}
   <label class="opcao">
     <input type="radio" name="modo" value="{{ valor }}" {{ 'checked' if cfg.modo == valor }} required>
     <span><b>{{ titulo }}</b><small>{{ desc }}</small></span>
@@ -88,7 +91,7 @@
 {% macro minima(cfg) %}
 <label class="campo-num">
   <input type="number" name="revisao_minima" min="1" max="50" value="{{ cfg.revisao_minima }}" required>
-  <span>assuntos por dia</span>
+  <span>assuntos por seção, por dia</span>
 </label>
 {% endmacro %}
 
@@ -96,12 +99,12 @@
 <div class="opcoes">
   <label class="opcao">
     <input type="radio" name="questoes_modo" value="auto" {{ 'checked' if cfg.questoes_modo == 'auto' }}>
-    <span><b>Automático (pela tabela)</b><small>De 4 a 20 questões, conforme sua última % de acerto.</small></span>
+    <span><b>Automático</b><small>De 4 a 20 questões: quanto pior o domínio, mais questões.</small></span>
   </label>
   <label class="opcao">
     <input type="radio" name="questoes_modo" value="fixo" {{ 'checked' if cfg.questoes_modo == 'fixo' }}>
-    <span><b>Número fixo</b><small>Sempre a mesma quantidade:
-      <input type="number" name="questoes_fixas" min="1" max="500" value="{{ cfg.questoes_fixas }}" class="num-inline"> questões</small></span>
+    <span><b>Número fixo</b><small>Sempre
+      <input type="number" name="questoes_fixas" min="1" max="500" value="{{ cfg.questoes_fixas }}" class="num-inline"> questões por assunto.</small></span>
   </label>
 </div>
 {% endmacro %}

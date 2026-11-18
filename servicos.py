@@ -34,8 +34,15 @@ def ler_dias(texto: str | None) -> list[int]:
     return sorted({int(d) for d in (texto or "").split(",") if d.strip().isdigit() and 0 <= int(d) <= 6})
 
 
-def dias_por_assunto(db, uid: int) -> dict[int, list[int]]:
+def usa_dias_por_secao(cfg: dict) -> bool:
+    """Os dias de cada seção só valem se a pessoa escolheu "cada seção tem seus dias"."""
+    return cfg.get("distribuicao") == "dias"
+
+
+def dias_por_assunto(db, uid: int, cfg: dict | None = None) -> dict[int, list[int]]:
     """Dias de estudo da seção de cada assunto ([] = todo dia)."""
+    if cfg is not None and not usa_dias_por_secao(cfg):
+        return {}
     return {r["id"]: ler_dias(r["dias_estudo"]) for r in db.execute(
         """SELECT a.id, m.dias_estudo FROM assuntos a JOIN materias m ON m.id = a.materia_id
            WHERE a.usuario_id = ?""", (uid,))}
@@ -135,7 +142,7 @@ def estados(db, uid: int, dia: date, cfg: dict, antes_de: date | None = None,
             ids: set[int] | None = None) -> dict[int, L.EstadoAssunto]:
     """Estado de cada assunto que já tem sessões (só os de `ids`, se informado)."""
     fixas = questoes_fixas(cfg)
-    dias = dias_por_assunto(db, uid)
+    dias = dias_por_assunto(db, uid, cfg)
     res = {}
     for aid, sess in sessoes_por_assunto(db, uid, antes_de).items():
         if ids is not None and aid not in ids:
@@ -161,38 +168,25 @@ def selecao_do_dia(db, uid: int, dia: date, cfg: dict, assuntos: dict) -> dict:
     tipo = L.tipo_de_revisao(cfg["modo"], cfg["dias_fixos"], dia)
     proximo_fixo = L.proximo_dia_fixo(dia, cfg["dias_fixos"])
 
-    ontem = (dia - timedelta(days=1)).isoformat()
-    ids_ontem = [r["assunto_id"] for r in db.execute(
-        "SELECT assunto_id FROM estudo_do_dia WHERE usuario_id = ? AND data = ? ORDER BY id",
-        (uid, ontem))]
-    # Também conta como "estudado ontem" o assunto cuja primeira prática foi ontem.
-    for r in db.execute(
-        """SELECT assunto_id FROM sessoes WHERE usuario_id = ?
-           GROUP BY assunto_id HAVING MIN(data) = ?""", (uid, ontem)):
-        if r["assunto_id"] not in ids_ontem:
-            ids_ontem.append(r["assunto_id"])
-
-    # Seções que não são estudadas no dia ficam fora da revisão.
+    # Seções que não são estudadas no dia ficam fora da revisão
+    # (só quando a pessoa usa "cada seção tem seus dias").
+    if not usa_dias_por_secao(cfg):
+        assuntos = {aid: dict(a, dias_materia=[]) for aid, a in assuntos.items()}
     pausadas = {a["materia"] for a in assuntos.values() if not L.estuda_no_dia(dia, a["dias_materia"])}
     est = {aid: e for aid, e in est.items() if L.estuda_no_dia(dia, assuntos[aid]["dias_materia"])}
 
     if tipo == "grande":
         selecao = L.selecionar_revisao_grande(list(est.values()), dia, proximo_fixo)
     elif tipo == "diaria":
-        selecao = L.selecionar_revisao_diaria(list(est.values()), ids_ontem, cfg["revisao_minima"])
+        secao_de = {aid: assuntos[aid]["materia_id"] for aid in est}
+        selecao = L.selecionar_revisao_diaria(list(est.values()), dia, cfg["revisao_minima"], secao_de)
     elif tipo == "completa":
         selecao = L.selecionar_revisao_completa(list(est.values()), dia)
     else:
         selecao = []
 
-    # Dia vazio: adianta as revisões mais próximas (configurável, padrão 1).
-    adiantadas: set[int] = set()
-    if tipo and not selecao and cfg.get("adiantar", 1) > 0:
-        selecao = L.selecionar_adiantadas(list(est.values()), dia, cfg["adiantar"])
-        adiantadas = {e.assunto_id for e in selecao}
-
     return {"tipo": tipo, "proximo_fixo": proximo_fixo, "selecao": [e for e in selecao if e.assunto_id in assuntos],
-            "adiantadas": adiantadas, "pausadas": pausadas}
+            "pausadas": pausadas}
 
 
 def montar_hoje(db, uid: int, dia: date) -> dict:
@@ -207,7 +201,7 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     assuntos = {a["id"]: a for a in listar_folhas(db, uid)}   # grupos não entram na revisão
     sel = selecao_do_dia(db, uid, dia, cfg, assuntos)
     tipo, proximo_fixo, selecao = sel["tipo"], sel["proximo_fixo"], sel["selecao"]
-    adiantadas, pausadas = sel["adiantadas"], sel["pausadas"]
+    pausadas = sel["pausadas"]
 
     # Prévia de amanhã: mesmas regras, já contando as práticas de hoje.
     amanha_dia = dia + timedelta(days=1)
@@ -215,8 +209,7 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     amanha = {
         "data": amanha_dia,
         "tipo": sel_am["tipo"],
-        "itens": [{"assunto": assuntos[e.assunto_id], "estado": e,
-                   "adiantado": e.assunto_id in sel_am["adiantadas"]} for e in sel_am["selecao"]],
+        "itens": [{"assunto": assuntos[e.assunto_id], "estado": e} for e in sel_am["selecao"]],
         "questoes": sum(e.questoes for e in sel_am["selecao"]),
         "pausadas": sorted(sel_am["pausadas"], key=chave_ordem),
     }
@@ -232,8 +225,7 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     for e in selecao:
         if e.assunto_id in assuntos:
             revisao.append({"assunto": assuntos[e.assunto_id], "estado": e,
-                            "feito": feitas_hoje.get(e.assunto_id),
-                            "adiantado": e.assunto_id in adiantadas})
+                            "feito": feitas_hoje.get(e.assunto_id)})
 
     # ---- Painel: números do dia, próximos dias e progresso no conteúdo ----
     # Estado ATUAL (inclui as sessões de hoje) para atrasos, domínio e agenda.
@@ -270,7 +262,6 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
         "fixas": questoes_fixas(cfg),
         "tem_assuntos": bool(assuntos),
         "pausadas": sorted(pausadas, key=chave_ordem),
-        "n_adiantadas": len(adiantadas),
         "amanha": amanha,
     }
 
@@ -343,7 +334,7 @@ def exportar(db, uid: int) -> dict:
             "ritmo": cfg["ritmo"],
             "aprendizado": cfg["aprendizado"],
             "teto_dias": cfg["teto_dias"],
-            "adiantar": cfg["adiantar"],
+            "distribuicao": cfg["distribuicao"],
         },
         "materias": materias,
     }
@@ -463,13 +454,12 @@ def validar_config(form: dict) -> dict:
     teto = int(teto) if teto not in (None, "") else L.sugerir_teto(ritmo, aprendizado)
     if not L.TETO_MIN <= teto <= L.TETO_MAX:
         raise ValueError(f"O máximo de dias sem revisão deve ficar entre {L.TETO_MIN} e {L.TETO_MAX}.")
-    adiantar = form.get("adiantar")
-    adiantar = 1 if adiantar in (None, "") else int(adiantar)
-    if not 0 <= adiantar <= 3:
-        raise ValueError("Escolha adiantar de 0 a 3 assuntos.")
+    distribuicao = form.get("distribuicao") or "todas"
+    if distribuicao not in ("todas", "dias"):
+        raise ValueError("Escolha como você distribui as seções na semana.")
     return {"modo": modo, "dias_fixos": dias, "revisao_minima": minima,
             "questoes_modo": qmodo, "questoes_fixas": qfixas, "ritmo": ritmo,
-            "aprendizado": aprendizado, "teto_dias": teto, "adiantar": adiantar}
+            "aprendizado": aprendizado, "teto_dias": teto, "distribuicao": distribuicao}
 
 
 def salvar_config(db, uid: int, dados: dict, commit: bool = True):
@@ -478,9 +468,9 @@ def salvar_config(db, uid: int, dados: dict, commit: bool = True):
     db.execute(
         """UPDATE configuracoes SET modo = ?, dias_fixos = ?, revisao_minima = ?,
            questoes_modo = ?, questoes_fixas = ?, ritmo = ?, aprendizado = ?, teto_dias = ?,
-           adiantar = ? WHERE usuario_id = ?""",
+           distribuicao = ? WHERE usuario_id = ?""",
         (c["modo"], ",".join(map(str, c["dias_fixos"])), c["revisao_minima"],
          c["questoes_modo"], c["questoes_fixas"], c["ritmo"], c["aprendizado"], c["teto_dias"],
-         c["adiantar"], uid))
+         c["distribuicao"], uid))
     if commit:
         db.commit()

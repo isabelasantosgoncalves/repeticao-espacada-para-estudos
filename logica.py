@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from math import floor
+from math import ceil, floor
 
 # Pequena tolerância para comparar frações (ex.: 17/20 deve contar como 85%).
 EPS = 1e-9
@@ -204,12 +204,26 @@ def calcular_intervalo(
         else:
             intervalo = dias_tabela
         if i < len(tetos):
-            intervalo = min(intervalo, tetos[i])
+            intervalo = intervalo_na_fase(tetos[i], dom)
         sugeridas = questoes_sugeridas(dom, questoes_fixas)
     final = aplicar_ritmo(intervalo, fator)
     if teto:
         final = min(final, teto)
     return final, sequencia
+
+
+def intervalo_na_fase(teto_fase: int, dom: float) -> int:
+    """
+    Fase de aprendizado: o assunto novo volta no teto do degrau só se foi bem.
+      bom   (domínio >= 85%)  -> teto do degrau (ex.: 3 dias)
+      médio (50% a 84%)       -> metade do teto, arredondando para cima (ex.: 2)
+      mal   (abaixo de 50%)   -> 1 dia
+    """
+    if dom + EPS >= LIMIAR_BOM:
+        return teto_fase
+    if dom + EPS >= 0.50:
+        return max(1, ceil(teto_fase / 2))
+    return 1
 
 
 def aplicar_ritmo(intervalo: int, fator: float) -> int:
@@ -394,42 +408,27 @@ def ordenar_por_prioridade(estados: list[EstadoAssunto]) -> list[EstadoAssunto]:
 
 def selecionar_revisao_diaria(
     estados: list[EstadoAssunto],
-    ids_estudados_ontem: list[int],
+    hoje: date,
     n: int,
+    secao_de: dict[int, str] | None = None,
 ) -> list[EstadoAssunto]:
     """
-    Revisão mínima diária: o(s) assunto(s) estudado(s) ontem + os assuntos de
-    menor domínio efetivo, até completar N assuntos, sem repetir.
-
-    Se o assunto de ontem também for o de menor domínio, ele entra uma única
-    vez e a vaga seguinte vai para o próximo de menor domínio.
+    Revisão do dia: só os assuntos que já venceram, até n POR SEÇÃO,
+    começando pelos que mais precisam (maior prioridade). O que passar do
+    limite continua vencido e entra nos próximos dias.
+    `secao_de` liga cada assunto à sua seção (sem ele, o limite vale para tudo).
     """
     if n <= 0:
         return []
-    por_id = {e.assunto_id: e for e in estados}
+    secao_de = secao_de or {}
     escolhidos: list[EstadoAssunto] = []
-    usados: set[int] = set()
-
-    # Se mais assuntos foram estudados ontem do que cabem no dia, entram
-    # primeiro os de menor domínio (os que mais precisam).
-    de_ontem = sorted({por_id[a].assunto_id: por_id[a] for a in ids_estudados_ontem if a in por_id}.values(),
-                      key=lambda e: (e.dominio_efetivo, -e.prioridade, e.assunto_id))
-    for e in de_ontem:
-        if len(escolhidos) >= n:
-            break
-        escolhidos.append(e)
-        usados.add(e.assunto_id)
-
-    restantes = sorted(
-        (e for e in estados if e.assunto_id not in usados),
-        key=lambda e: (e.dominio_efetivo, -e.prioridade, e.assunto_id),
-    )
-    for e in restantes:
-        if len(escolhidos) >= n:
-            break
-        escolhidos.append(e)
-
-    return ordenar_por_prioridade(escolhidos)
+    por_secao: dict[str, int] = {}
+    for e in ordenar_por_prioridade([e for e in estados if e.proxima_revisao <= hoje]):
+        sec = secao_de.get(e.assunto_id, "")
+        if por_secao.get(sec, 0) < n:
+            escolhidos.append(e)
+            por_secao[sec] = por_secao.get(sec, 0) + 1
+    return escolhidos
 
 
 def selecionar_revisao_grande(
@@ -464,18 +463,6 @@ def selecionar_revisao_completa(estados: list[EstadoAssunto], hoje: date) -> lis
     venceu, da maior para a menor prioridade. Sem limite de assuntos.
     """
     return ordenar_por_prioridade([e for e in estados if e.proxima_revisao <= hoje])
-
-
-def selecionar_adiantadas(estados: list[EstadoAssunto], hoje: date, n: int) -> list[EstadoAssunto]:
-    """
-    Dia sem nenhuma revisão (comum no começo, com poucos assuntos): adianta as
-    n revisões mais próximas. Desempate: maior prioridade (menor domínio) primeiro.
-    """
-    if n <= 0:
-        return []
-    futuras = [e for e in estados if e.proxima_revisao > hoje]
-    futuras.sort(key=lambda e: (e.proxima_revisao, -e.prioridade, e.assunto_id))
-    return futuras[:n]
 
 
 def classificar_para_mapa(estado: EstadoAssunto, hoje: date) -> str:

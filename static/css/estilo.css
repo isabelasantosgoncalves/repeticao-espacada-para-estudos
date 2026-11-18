@@ -523,18 +523,24 @@ select { max-width: 100%; text-overflow: ellipsis; }
 .lateral > .bloco { display: flex; flex-direction: column; }
 .lat-rodape { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--linha); font-size: .86rem; }
 
-/* teto de dias */
+/* teto de dias: controle segmentado */
 .teto { margin-bottom: 22px; }
-.teto-sugestao { margin: 0 0 12px; padding: 10px 14px; background: var(--acento-claro); border-radius: 6px; font-size: .92rem; }
-.teto-sugestao b { font-family: var(--serifa); font-weight: 500; font-size: 1.15rem; color: var(--acento); }
-.teto-sugestao .link-p { margin-left: 6px; }
-.teto-escolha { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.chip-teto { font: inherit; font-family: var(--mono); font-size: .85rem; padding: 8px 12px; border: 1px solid var(--linha-forte); border-radius: 6px; background: #fff; color: var(--texto-2); cursor: pointer; }
-.chip-teto:hover { border-color: var(--acento); }
-.chip-teto.on { background: var(--acento); border-color: var(--acento); color: #fff; }
-.teto-num { display: inline-flex !important; align-items: center; gap: 8px; font-weight: 400 !important; color: var(--texto-2); margin-left: 6px; }
-.teto-num input { width: 84px; text-align: center; }
-.teto .mini { margin: 10px 0 0; }
+.seg { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--linha-forte); border-radius: 8px; overflow: hidden; background: #fff; }
+.seg-op { font: inherit; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; border: 0; background: transparent; color: var(--texto); cursor: pointer; }
+.seg-op + .seg-op { border-left: 1px solid var(--linha); }
+.seg-op b { font-family: var(--serifa); font-weight: 500; font-size: 1.35rem; line-height: 1; }
+.seg-op small { font-family: var(--mono); font-size: .68rem; color: var(--texto-3); }
+.seg-op:hover { background: var(--fundo); }
+.seg-op.on { background: var(--acento); color: #fff; }
+.seg-op.on small { color: rgba(255, 255, 255, .8); }
+.seg-op:focus-visible { outline: 2px solid var(--acento); outline-offset: -2px; }
+.teto-rodape { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.teto-num { display: inline-flex !important; align-items: center; gap: 8px; font-weight: 400 !important; font-size: .88rem; color: var(--texto-2); }
+.teto-num input { width: 80px; text-align: center; padding: 6px 8px; }
+.teto-sugestao { font-size: .86rem; color: var(--texto-2); }
+.teto-sugestao b { font-family: var(--mono); font-weight: 500; color: var(--acento); }
+.teto-sugestao .link-p { margin-left: 4px; }
+@media (max-width: 640px) { .seg { grid-template-columns: repeat(3, 1fr); } .seg-op:nth-child(4) { border-left: 0; } .seg-op:nth-child(n+4) { border-top: 1px solid var(--linha); } }
 .pausadas { display: block; margin-top: 4px; font-size: .84rem; color: var(--texto-3); }
 .dia-largo span { width: auto; padding: 0 14px; }
 .adiantadas { display: block; margin-bottom: 4px; color: var(--acento); font-size: .88rem; }
@@ -580,3 +586,4 @@ button.mr.on span { color: var(--acento); font-weight: 600; }
 .amanha-lista small { font-family: var(--mono); font-size: .74rem; }
 .lat-sub { font-family: var(--mono); font-size: .7rem; font-weight: 400; color: var(--texto-3); text-transform: uppercase; letter-spacing: .06em; margin-left: 6px; }
 .lm-data { font-size: .8rem; }
+.opcao-meta span { display: inline; }

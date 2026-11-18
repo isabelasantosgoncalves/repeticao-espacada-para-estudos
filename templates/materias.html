@@ -67,7 +67,7 @@
     <div class="sec-titulo">
       <h2>{{ m.nome }}</h2>
       <span class="sec-meta">{{ m.folhas | length }} assunto{{ 's' if m.folhas | length != 1 }} · {{ m.folhas | sum(attribute='n_sessoes') }} práticas</span>
-      <span class="sec-dias" title="Dias em que esta seção entra na revisão">{{ dias_txt(m.dias_estudo) }}</span>
+      {% if cfg.distribuicao == 'dias' %}<span class="sec-dias" title="Dias em que esta seção entra na revisão">{{ dias_txt(m.dias_estudo) }}</span>{% endif %}
     </div>
     <a class="btn btn-fantasma btn-p sec-editar" href="{{ url_for('materias', editar=m.id) }}#materia-{{ m.id }}" data-alternar-edicao>Editar seção</a>
     <a class="btn btn-p sec-concluir" href="{{ url_for('materias') }}#materia-{{ m.id }}" data-alternar-edicao>Concluir</a>
@@ -80,6 +80,7 @@
       <span class="ed-rotulo">Nome da seção</span>
       <input type="text" name="nome" value="{{ m.nome }}" required maxlength="120" aria-label="Nome da seção">
     </label>
+    {% if cfg.distribuicao == 'dias' %}
     <div class="sec-campo">
       <span class="ed-rotulo">Quando estudo esta seção</span>
       <div class="sec-freq">
@@ -91,8 +92,9 @@
         <label class="dia"><input type="checkbox" name="dias_estudo" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 in m.dias_estudo }}><span>{{ nome[:3] }}</span></label>
         {% endfor %}
       </div>
-      <small>Nos outros dias, os assuntos desta seção não entram na revisão, e uma revisão que cairia num desses dias passa para o próximo dia de estudo, sem contar como atraso.</small>
+      <small>Nos outros dias a seção fica fora da revisão, sem contar atraso.</small>
     </div>
+    {% endif %}
     <div class="sec-acoes">
       <button class="btn btn-p">Salvar seção</button>
     </div>

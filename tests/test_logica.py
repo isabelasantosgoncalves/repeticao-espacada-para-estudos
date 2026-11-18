@@ -240,44 +240,38 @@ class TestAgenda(unittest.TestCase):
 
 
 class TestSelecaoDiaria(unittest.TestCase):
+    """Revisão do dia: só o que venceu, até n por seção, pelos que mais precisam."""
+
     def setUp(self):
+        antes = HOJE - timedelta(days=1)
+        depois = HOJE + timedelta(days=2)
         self.estados = [
-            estado(1, 0.90, 0.10),
-            estado(2, 0.30, 0.70),
-            estado(3, 0.50, 0.50),
-            estado(4, 0.70, 0.30),
+            estado(1, 0.90, 0.10, proxima=antes),
+            estado(2, 0.30, 0.70, proxima=HOJE),
+            estado(3, 0.50, 0.50, proxima=antes),
+            estado(4, 0.20, 0.80, proxima=depois),   # ainda não venceu
+            estado(5, 0.60, 0.40, proxima=HOJE),
         ]
+        self.secao = {1: "Math", 2: "Math", 3: "Math", 4: "Math", 5: "English"}
 
     def ids(self, lista):
-        return sorted(e.assunto_id for e in lista)
+        return [e.assunto_id for e in lista]
 
-    def test_ontem_mais_menor_dominio(self):
-        sel = L.selecionar_revisao_diaria(self.estados, [1], 2)
-        self.assertEqual(self.ids(sel), [1, 2])
+    def test_so_o_que_venceu(self):
+        sel = L.selecionar_revisao_diaria(self.estados, HOJE, 10, self.secao)
+        self.assertNotIn(4, self.ids(sel))
+        self.assertEqual(sorted(self.ids(sel)), [1, 2, 3, 5])
 
-    def test_ontem_e_o_menor_dominio_pega_o_proximo(self):
-        sel = L.selecionar_revisao_diaria(self.estados, [2], 2)
-        self.assertEqual(self.ids(sel), [2, 3])
+    def test_limite_por_secao_pelos_que_mais_precisam(self):
+        sel = L.selecionar_revisao_diaria(self.estados, HOJE, 2, self.secao)
+        self.assertEqual(self.ids(sel), [2, 3, 5])   # Math: 2 e 3 (prioridade maior); English: 5
 
-    def test_sem_assunto_ontem(self):
-        sel = L.selecionar_revisao_diaria(self.estados, [], 3)
-        self.assertEqual(self.ids(sel), [2, 3, 4])
+    def test_sem_secoes_o_limite_vale_para_tudo(self):
+        self.assertEqual(len(L.selecionar_revisao_diaria(self.estados, HOJE, 2)), 2)
 
-    def test_muitos_de_ontem_pega_os_de_menor_dominio(self):
-        sel = L.selecionar_revisao_diaria(self.estados, [1, 4, 3], 2)
-        self.assertEqual(self.ids(sel), [3, 4])   # 50% e 70%, não o de 90%
-
-    def test_n_maior_que_disponivel(self):
-        self.assertEqual(len(L.selecionar_revisao_diaria(self.estados, [1], 10)), 4)
-
-    def test_ontem_desconhecido_e_ignorado(self):
-        sel = L.selecionar_revisao_diaria(self.estados, [99], 1)
-        self.assertEqual(self.ids(sel), [2])
-
-    def test_resultado_ordenado_por_prioridade(self):
-        sel = L.selecionar_revisao_diaria(self.estados, [1], 3)
-        prios = [e.prioridade for e in sel]
-        self.assertEqual(prios, sorted(prios, reverse=True))
+    def test_nada_venceu(self):
+        futuros = [estado(9, 0.2, 0.8, proxima=HOJE + timedelta(days=3))]
+        self.assertEqual(L.selecionar_revisao_diaria(futuros, HOJE, 3), [])
 
 
 class TestSelecaoGrande(unittest.TestCase):
@@ -301,9 +295,18 @@ class TestFaseDeAprendizado(unittest.TestCase):
         self.assertEqual(L.calcular_intervalo([1.0, 1.0, 1.0], [5, 5, 5])[0], 30)
         self.assertEqual(L.calcular_intervalo([1.0] * 4, [5] * 4)[0], 60)
 
-    def test_teto_nao_aumenta_intervalo_curto(self):
-        # errou muito: a tabela (2 dias) já é menor que o teto
-        self.assertEqual(L.calcular_intervalo([0.3], [10])[0], 2)
+    def test_volta_antes_se_nao_foi_bem(self):
+        # Equilíbrio (7, 15): bom 7, médio 4 (metade, para cima), mal 1
+        self.assertEqual(L.calcular_intervalo([1.0], [10])[0], 7)
+        self.assertEqual(L.calcular_intervalo([0.6], [10])[0], 4)
+        self.assertEqual(L.calcular_intervalo([0.3], [10])[0], 1)
+        # "Quero confirmar bem" (3, 7, 15): bom 3, médio 2, mal 1
+        degraus = L.tetos_da_fase("degraus")
+        self.assertEqual([L.calcular_intervalo([p], [10], tetos=degraus)[0] for p in (1.0, 0.6, 0.3)], [3, 2, 1])
+
+    def test_vale_em_cada_degrau(self):
+        # 2ª prática no Equilíbrio (teto 15): médio -> 8
+        self.assertEqual(L.calcular_intervalo([1.0, 0.7], [10, 10])[0], 8)
 
     def test_estado_marca_fase(self):
         d = HOJE - timedelta(days=1)
@@ -354,7 +357,7 @@ class TestTetoDoUsuario(unittest.TestCase):
         self.assertEqual(seq, [30, 60, 120, 240, 365])
 
     def test_teto_nao_mexe_em_intervalo_curto(self):
-        self.assertEqual(L.calcular_intervalo([0.3], [10], teto=30)[0], 2)
+        self.assertEqual(L.calcular_intervalo([0.3], [10], teto=30)[0], 1)
 
 
 class TestRitmo(unittest.TestCase):
@@ -421,19 +424,6 @@ class TestDiasDaSecao(unittest.TestCase):
         self.assertEqual(livre.proxima_revisao, HOJE)
         self.assertEqual(secao.proxima_revisao, HOJE + timedelta(days=1))
         self.assertEqual(secao.atraso, 0)
-
-
-class TestAdiantar(unittest.TestCase):
-    def test_pega_as_mais_proximas(self):
-        estados = [
-            estado(1, 0.9, 0.1, proxima=HOJE + timedelta(days=9)),
-            estado(2, 0.6, 0.4, proxima=HOJE + timedelta(days=2)),
-            estado(3, 0.8, 0.2, proxima=HOJE + timedelta(days=2)),
-            estado(4, 0.5, 0.5, proxima=HOJE + timedelta(days=5)),
-        ]
-        self.assertEqual([e.assunto_id for e in L.selecionar_adiantadas(estados, HOJE, 1)], [2])
-        self.assertEqual([e.assunto_id for e in L.selecionar_adiantadas(estados, HOJE, 3)], [2, 3, 4])
-        self.assertEqual(L.selecionar_adiantadas(estados, HOJE, 0), [])
 
 
 class TestMapa(unittest.TestCase):

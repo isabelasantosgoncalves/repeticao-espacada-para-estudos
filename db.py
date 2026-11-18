@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS configuracoes (
     ritmo           TEXT    NOT NULL DEFAULT 'leve',    -- leve | moderado | intenso
     aprendizado     TEXT    NOT NULL DEFAULT 'padrao',  -- cautelosa | degraus | padrao | solta
     teto_dias       INTEGER NOT NULL DEFAULT 45,        -- máximo de dias sem revisar um assunto
-    adiantar        INTEGER NOT NULL DEFAULT 1          -- dia sem revisão: quantos assuntos adiantar (0-3)
+    adiantar        INTEGER NOT NULL DEFAULT 1,         -- (sem uso) antigo "adiantar revisões"
+    distribuicao    TEXT    NOT NULL DEFAULT 'todas'    -- todas (todo dia) | dias (cada seção tem seus dias)
 );
 
 -- "Seções" na interface (ex.: SAT Math). dias_estudo vazio = todo dia;
@@ -107,6 +108,11 @@ def iniciar_db(caminho: str):
         con.execute("ALTER TABLE configuracoes ADD COLUMN ritmo TEXT NOT NULL DEFAULT 'leve'")
     if "aprendizado" not in colunas:
         con.execute("ALTER TABLE configuracoes ADD COLUMN aprendizado TEXT NOT NULL DEFAULT 'padrao'")
+    if "distribuicao" not in colunas:
+        con.execute("ALTER TABLE configuracoes ADD COLUMN distribuicao TEXT NOT NULL DEFAULT 'todas'")
+        # quem já tinha marcado dias numa seção continua usando os dias
+        con.execute("""UPDATE configuracoes SET distribuicao = 'dias' WHERE usuario_id IN
+                       (SELECT usuario_id FROM materias WHERE dias_estudo != '')""")
     if "adiantar" not in colunas:
         con.execute("ALTER TABLE configuracoes ADD COLUMN adiantar INTEGER NOT NULL DEFAULT 1")
     if "teto_dias" not in colunas:

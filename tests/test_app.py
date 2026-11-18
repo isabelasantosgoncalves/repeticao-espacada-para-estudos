@@ -166,14 +166,14 @@ class TestApp(unittest.TestCase):
         self.assertEqual(cfg["modo"], "completa")
         self.post("/materias/nova", {"nome": "Math"}, "/materias")
         self.post("/assuntos/novo", {"nome": "Algebra", "materia_id": "1"}, "/materias")
-        self.assertIn("vence hoje ou está atrasado", self.c.get("/hoje").get_data(as_text=True))
+        self.assertIn("Tudo que venceu", self.c.get("/hoje").get_data(as_text=True))
 
     def test_dias_de_estudo_da_secao(self):
         from datetime import date, timedelta
         hoje = S.hoje()
         self.criar_usuario("d@d.com")
         self.post("/configuracoes", {"ritmo": "leve", "aprendizado": "padrao", "teto_dias": "45",
-                                     "modo": "completa", "revisao_minima": "2", "questoes_modo": "auto",
+                                     "distribuicao": "dias", "modo": "completa", "revisao_minima": "2", "questoes_modo": "auto",
                                      "questoes_fixas": "10"}, "/configuracoes")
         self.post("/materias/nova", {"nome": "Música"}, "/materias")
         self.post("/assuntos/novo", {"nome": "Intervalos", "materia_id": "1"}, "/materias")
@@ -186,7 +186,7 @@ class TestApp(unittest.TestCase):
         self.post("/materias/1/editar", {"nome": "Música", "frequencia": "dias", "dias_estudo": outro_dia},
                   "/materias")
         html = self.c.get("/hoje").get_data(as_text=True)
-        self.assertIn("Hoje não é dia de: Música", html)
+        self.assertIn("fora hoje: Música", html)
         self.assertNotIn("Intervalos", html.split('<aside class="lateral">')[0])
         # exportar leva os dias da seção
         self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["materias"][0]["dias_estudo"],
@@ -196,25 +196,21 @@ class TestApp(unittest.TestCase):
         self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["materias"][0]["dias_estudo"],
                          [int(outro_dia)])
 
-    def test_dia_vazio_adianta_e_mapa_sem_nao_estudados(self):
-        from datetime import date, timedelta
+    def test_dia_sem_vencimento_e_mapa_sem_nao_estudados(self):
         hoje = S.hoje()
+        from datetime import timedelta
         self.criar_usuario("v@z.com")
-        cfg = {"ritmo": "leve", "aprendizado": "padrao", "teto_dias": "45", "modo": "completa",
-               "revisao_minima": "2", "questoes_modo": "auto", "questoes_fixas": "10"}
-        self.post("/configuracoes", dict(cfg, adiantar="1"), "/configuracoes")
+        self.post("/configuracoes", {"ritmo": "leve", "aprendizado": "padrao", "teto_dias": "45",
+                                     "modo": "diaria", "revisao_minima": "2", "questoes_modo": "auto",
+                                     "questoes_fixas": "10"}, "/configuracoes")
         self.post("/materias/nova", {"nome": "SAT"}, "/materias")
         self.post("/assuntos/novo", {"nome": "Algebra", "materia_id": "1"}, "/materias")
         self.post("/assuntos/novo", {"nome": "Geometria", "materia_id": "1"}, "/materias")
-        # acertou tudo ontem: nada vence hoje
+        # acertou tudo ontem: só volta em 7 dias, então hoje não há revisão
         self.post("/sessoes/nova", {"assunto_id": "1", "data": (hoje - timedelta(days=1)).isoformat(),
                                     "acertos": "10", "total": "10"}, "/sessoes/nova")
-        html = self.c.get("/hoje").get_data(as_text=True)
-        self.assertIn("adiantamos 1 revisão", html)
-        self.assertIn("adiantado", html)
-        # desligado: nada é adiantado
-        self.post("/configuracoes", dict(cfg, adiantar="0"), "/configuracoes")
-        self.assertNotIn("adiantamos", self.c.get("/hoje").get_data(as_text=True))
+        html = self.c.get("/hoje").get_data(as_text=True).split('<aside class="lateral">')[0]
+        self.assertNotIn("Algebra", html)
         # mapa: só estudados, sem a lista de "ainda não estudados"
         mapa = self.c.get("/mapa").get_data(as_text=True)
         self.assertIn("Algebra", mapa)
@@ -226,7 +222,7 @@ class TestApp(unittest.TestCase):
         self.criar_usuario("am@am.com")
         self.post("/configuracoes", {"ritmo": "leve", "aprendizado": "degraus", "teto_dias": "30",
                                      "modo": "diaria", "revisao_minima": "2", "questoes_modo": "auto",
-                                     "questoes_fixas": "10", "adiantar": "0"}, "/configuracoes")
+                                     "questoes_fixas": "10"}, "/configuracoes")
         self.post("/materias/nova", {"nome": "SAT"}, "/materias")
         for nome in ("Alfa", "Beta", "Gama"):
             self.post("/assuntos/novo", {"nome": nome, "materia_id": "1"}, "/materias")
@@ -236,9 +232,9 @@ class TestApp(unittest.TestCase):
                                         "acertos": ac, "total": "10"}, "/sessoes/nova")
         html = self.c.get("/hoje").get_data(as_text=True)
         amanha = html.split('class="bloco amanha"')[1].split("</section>")[0]
-        self.assertIn("Beta", amanha)      # 40%
-        self.assertIn("Gama", amanha)      # 60%
-        self.assertNotIn("Alfa", amanha)   # 100%: não cabe no limite de 2
+        self.assertIn("Beta", amanha)      # 40%: foi mal, volta em 1 dia
+        self.assertNotIn("Gama", amanha)   # 60%: médio, volta em 2 dias
+        self.assertNotIn("Alfa", amanha)   # 100%: bom, volta em 3 dias
         self.assertIn("Vencimentos", html)
 
     def test_pwa(self):
