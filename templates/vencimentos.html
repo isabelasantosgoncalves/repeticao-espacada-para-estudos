@@ -1,43 +1,37 @@
 {% extends "base.html" %}
-{% block titulo %}Vencimentos{% endblock %}
+{% block titulo %}Próximas revisões{% endblock %}
 {% block main_class %}conteudo medio{% endblock %}
-
-{% macro linha(item) %}{% set e = item.estado %}{% set a = item.assunto %}
-<li>
-  <i class="ponto {{ e.dominio_efetivo | cor }}"></i>
-  <a href="{{ url_for('historico', aid=a.id) }}">{{ a.nome }}</a>
-  <small>{{ a.materia }}{% if a.pai %} · {{ a.pai }}{% endif %}</small>
-  <span class="vc-dom">{{ e.dominio_efetivo | pct }}</span>
-</li>
-{% endmacro %}
 
 {% block conteudo %}
 <div class="cab-pagina">
   <div>
     <p class="selo"><a href="{{ url_for('hoje') }}">Hoje</a></p>
-    <h1>Vencimentos</h1>
+    <h1>Próximas revisões</h1>
   </div>
   <div class="vc-periodo">
     <a class="btn btn-p {{ 'btn-fantasma' if n_dias != 7 }}" href="{{ url_for('vencimentos') }}">7 dias</a>
     <a class="btn btn-p {{ 'btn-fantasma' if n_dias != 14 }}" href="{{ url_for('vencimentos', dias=14) }}">14 dias</a>
   </div>
 </div>
-
-{% if vencidos %}
-<section class="bloco vc-dia vc-atrasados">
-  <h2>Já venceram <span class="cont">{{ vencidos | length }}</span></h2>
-  <ul class="vc-lista">{% for item in vencidos %}{{ linha(item) }}{% endfor %}</ul>
-</section>
-{% endif %}
+<p class="sub vc-nota">O que entra na revisão de cada dia{% if cfg.modo in ('diaria', 'ambos') %}, até {{ cfg.revisao_minima }} por seção{% endif %}.</p>
 
 {% for d in dias %}
 <section class="bloco vc-dia {{ 'vazio-dia' if not d.itens }}" id="dia-{{ d.data.isoformat() }}">
   <h2>{{ 'Hoje' if loop.first else NOMES_DIAS[d.data.weekday()] }} <small class="vc-data">{{ d.data | br }}</small>
     <span class="cont">{{ d.itens | length or '' }}</span></h2>
   {% if d.itens %}
-  <ul class="vc-lista">{% for item in d.itens %}{{ linha(item) }}{% endfor %}</ul>
+  <ul class="vc-lista">
+    {% for item in d.itens %}{% set e = item.estado %}{% set a = item.assunto %}
+    <li class="{{ 'feito' if item.feito }}">
+      <i class="ponto {{ e.dominio_efetivo | cor }}"></i>
+      <a href="{{ url_for('historico', aid=a.id) }}">{{ a.nome }}{% if item.feito %} ✓{% endif %}</a>
+      <small>{{ a.materia }}</small>
+      <span class="vc-dom">{{ e.dominio_efetivo | pct }}</span>
+    </li>
+    {% endfor %}
+  </ul>
   {% else %}
-  <p class="nada">Nada vence.</p>
+  <p class="nada">Sem revisão.</p>
   {% endif %}
 </section>
 {% endfor %}

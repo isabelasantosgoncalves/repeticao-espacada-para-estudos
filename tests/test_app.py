@@ -235,7 +235,7 @@ class TestApp(unittest.TestCase):
         self.assertIn("Beta", amanha)      # 40%: foi mal, volta em 1 dia
         self.assertNotIn("Gama", amanha)   # 60%: médio, volta em 2 dias
         self.assertNotIn("Alfa", amanha)   # 100%: bom, volta em 3 dias
-        self.assertIn("Vencimentos", html)
+        self.assertIn("Próximas revisões", html)
 
     def test_ciclo_de_estudos(self):
         hoje = S.hoje()
@@ -273,6 +273,26 @@ class TestApp(unittest.TestCase):
         # a fila vai junto no exportar
         self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["ciclo"],
                          ["Matemática", "Biologia", "História"])
+
+    def test_revisoes_planejadas_respeitam_o_limite(self):
+        from datetime import timedelta
+        hoje = S.hoje()
+        self.criar_usuario("pl@pl.com")
+        self.post("/configuracoes", {"ritmo": "leve", "aprendizado": "padrao", "teto_dias": "45",
+                                     "modo": "diaria", "revisao_minima": "2", "questoes_modo": "auto",
+                                     "questoes_fixas": "10"}, "/configuracoes")
+        self.post("/materias/nova", {"nome": "Math"}, "/materias")
+        for nome in ("A1", "A2", "A3"):
+            self.post("/assuntos/novo", {"nome": nome, "materia_id": "1"}, "/materias")
+        # os três venceram (30% há 5 dias -> voltariam em 1 dia)
+        for aid in ("1", "2", "3"):
+            self.post("/sessoes/nova", {"assunto_id": aid, "data": (hoje - timedelta(days=5)).isoformat(),
+                                        "acertos": "3", "total": "10"}, "/sessoes/nova")
+        html = self.c.get("/vencimentos").get_data(as_text=True)
+        dias = html.split('class="bloco vc-dia')[1:]
+        conta = lambda bloco: sum(bloco.count(f">{n}<") for n in ("A1", "A2", "A3"))
+        self.assertEqual(conta(dias[0]), 2)   # hoje: o limite de 2
+        self.assertEqual(conta(dias[1]), 1)   # amanhã: o que não coube
 
     def test_pwa(self):
         r = self.c.get("/manifest.webmanifest")

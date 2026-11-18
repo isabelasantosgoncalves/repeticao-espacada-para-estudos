@@ -280,10 +280,9 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     # Estado ATUAL (inclui as sessões de hoje) para atrasos, domínio e agenda.
     atual = estados(db, uid, dia, cfg, ids=set(assuntos))
 
-    proximos = []
-    for i in range(1, 8):
-        d = dia + timedelta(days=i)
-        proximos.append({"data": d, "n": sum(1 for e in atual.values() if e.proxima_revisao == d)})
+    # Próximos dias: a mesma revisão planejada da página "Próximas revisões".
+    plano = planejar_revisoes(db, uid, dia, 8, cfg)
+    proximos = [{"data": p["data"], "n": len(p["itens"])} for p in plano[1:]]
 
     com_sessao = {r["assunto_id"] for r in db.execute(
         "SELECT DISTINCT assunto_id FROM sessoes WHERE usuario_id = ?", (uid,))}
@@ -316,19 +315,70 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     }
 
 
-def montar_vencimentos(db, uid: int, dia: date, n_dias: int = 7) -> dict:
-    """Panorama da semana: o que já venceu e o que vence em cada um dos próximos dias."""
-    cfg = carregar_config(db, uid)
+def planejar_revisoes(db, uid: int, dia: date, n_dias: int = 7, cfg: dict | None = None) -> list[dict]:
+    """
+    Revisão planejada de cada dia, com as mesmas regras da tela Hoje (modo,
+    limite por seção, dia fixo, dias de cada seção e ciclo de estudos).
+
+    Supõe que a pessoa faz a revisão de cada dia: o que entra num dia sai da
+    fila; o que não cabe no limite continua vencido e passa para o dia
+    seguinte. Hoje usa exatamente a mesma lista da tela Hoje.
+    """
+    cfg = cfg or carregar_config(db, uid)
     assuntos = {a["id"]: a for a in listar_folhas(db, uid)}
-    est = estados(db, uid, dia, cfg, ids=set(assuntos))
-    item = lambda e: {"assunto": assuntos[e.assunto_id], "estado": e}
-    ordem = lambda lista: sorted(lista, key=lambda x: (x["assunto"]["materia"], -x["estado"].prioridade))
-    vencidos = ordem([item(e) for e in est.values() if e.proxima_revisao < dia])
-    dias = []
-    for i in range(n_dias):
+    if not usa_dias_por_secao(cfg):
+        assuntos = {aid: dict(a, dias_materia=[]) for aid, a in assuntos.items()}
+    atual = estados(db, uid, dia, cfg, ids=set(assuntos))
+    feitas_hoje = {r["assunto_id"] for r in db.execute(
+        "SELECT DISTINCT assunto_id FROM sessoes WHERE usuario_id = ? AND data = ?", (uid, dia.isoformat()))}
+
+    # Hoje: a mesma seleção da tela Hoje.
+    sel_hoje = selecao_do_dia(db, uid, dia, cfg, assuntos)["selecao"]
+    dias = [{"data": dia, "itens": [{"assunto": assuntos[e.assunto_id], "estado": e,
+                                     "feito": e.assunto_id in feitas_hoje} for e in sel_hoje]}]
+    # Fila para os próximos dias: estado atual (já com as práticas de hoje),
+    # sem o que entra hoje e ainda não foi feito.
+    fila = {aid: e for aid, e in atual.items()
+            if not (aid in {x.assunto_id for x in sel_hoje} and aid not in feitas_hoje)}
+
+    # Ciclo: simula a fila de seções andando um passo por dia.
+    ciclo = [dict(it) for it in ler_ciclo(db, uid)] if usa_ciclo(cfg) else []
+    k = cfg.get("secoes_por_dia", 2)
+    if ciclo:
+        for it in L.secoes_da_vez(ciclo, k, dia):
+            if it["ultimo_dia"] != dia:
+                it["rodada"] += 1
+
+    secao_de = {aid: a["materia_id"] for aid, a in assuntos.items()}
+    for i in range(1, n_dias):
         d = dia + timedelta(days=i)
-        dias.append({"data": d, "itens": ordem([item(e) for e in est.values() if e.proxima_revisao == d])})
-    return {"vencidos": vencidos, "dias": dias, "cfg": cfg}
+        candidatos = [e for aid, e in fila.items() if L.estuda_no_dia(d, assuntos[aid]["dias_materia"])]
+        if ciclo:
+            vez = L.secoes_da_vez(ciclo, k, d)
+            da_vez = {it["materia_id"] for it in vez}
+            candidatos = [e for e in candidatos if secao_de[e.assunto_id] in da_vez]
+            for it in vez:
+                it["rodada"] += 1
+        tipo = L.tipo_de_revisao(cfg["modo"], cfg["dias_fixos"], d)
+        if tipo == "grande":
+            sel = L.selecionar_revisao_grande(candidatos, d, L.proximo_dia_fixo(d, cfg["dias_fixos"]))
+        elif tipo == "diaria":
+            sel = L.selecionar_revisao_diaria(candidatos, d, cfg["revisao_minima"], secao_de)
+        elif tipo == "completa":
+            sel = L.selecionar_revisao_completa(candidatos, d)
+        else:
+            sel = []
+        for e in sel:
+            fila.pop(e.assunto_id, None)
+        dias.append({"data": d, "itens": [{"assunto": assuntos[e.assunto_id], "estado": e, "feito": False}
+                                         for e in sel]})
+    return dias
+
+
+def montar_vencimentos(db, uid: int, dia: date, n_dias: int = 7) -> dict:
+    """Página "Próximas revisões": a revisão planejada de cada dia."""
+    cfg = carregar_config(db, uid)
+    return {"dias": planejar_revisoes(db, uid, dia, n_dias, cfg), "cfg": cfg}
 
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,7 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 
 - **Contas de usuário**: cadastro, login e logout, senhas com hash. Cada usuário só vê e edita os próprios dados (checado no backend em todas as rotas).
 - **Onboarding** no primeiro acesso, antes de entrar no app: ritmo de estudo, fase de aprendizado, máximo de dias sem revisão, como as seções se distribuem na semana (todas todo dia, dias por seção ou ciclo de estudos), modo de revisão, dia fixo, limite por seção e questões por assunto.
-- **Hoje (painel)**: números do dia (revisões feitas, questões sugeridas, atrasados, domínio médio), a lista de revisões com registro direto na linha (acertos + Enter), uma prévia de **amanhã**, os **vencimentos** dos próximos 7 dias e o progresso nos assuntos ainda não começados.
+- **Hoje (painel)**: números do dia (revisões feitas, questões sugeridas, atrasados, domínio médio), a lista de revisões com registro direto na linha (acertos + Enter), uma prévia de **amanhã**, as **próximas revisões** (a lista planejada de cada dia, com o limite por seção) e o progresso nos assuntos ainda não começados.
 - **Registrar prática**: formulário rápido (seção → assunto, data, acertos, total, observação).
 - **Mapa de domínio**: uma lista só, por seção, com barra colorida (vermelho < 50%, amarelo 50–84%, verde ≥ 85%) e o status de cada assunto. Os contadores do topo (*Revisar agora*, *Pode esperar*, *Dominado*) servem de filtro.
 - **Histórico do assunto**: lista de práticas (editar/excluir) e gráfico de linha da % de acerto (Chart.js).
@@ -40,9 +40,9 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 |---|---|
 | ![Registrar](docs/prints/registrar.png) | ![Seções](docs/prints/materias.png) |
 
-| Vencimentos da semana | Assunto com subassuntos |
+| Próximas revisões | Assunto com subassuntos |
 |---|---|
-| ![Vencimentos](docs/prints/vencimentos.png) | ![Assunto com subassuntos](docs/prints/grupo.png) |
+| ![Próximas revisões](docs/prints/vencimentos.png) | ![Assunto com subassuntos](docs/prints/grupo.png) |
 
 | Configurações |
 |---|
