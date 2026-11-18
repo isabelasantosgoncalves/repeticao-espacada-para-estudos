@@ -61,6 +61,43 @@
 </div>
 {% endif %}
 
+{% if cfg.distribuicao == 'ciclo' and materias %}
+{# Ciclo de estudos: a fila de seções, na ordem em que se repete #}
+<section class="ciclo-painel" id="ciclo">
+  <div class="ciclo-cab">
+    <h2>Ciclo de estudos</h2>
+    <span class="sec-meta">{{ cfg.secoes_por_dia }} por dia · {{ ciclo | length }} na fila</span>
+  </div>
+  {% if ciclo %}
+  <ol class="ciclo-fila">
+    {% for it in ciclo %}
+    <li class="{{ 'vez' if it.id in vez_ids }}">
+      <span class="ciclo-pos">{{ loop.index }}</span>
+      <span class="ciclo-nome">{{ it.nome }}</span>
+      {% if it.id in vez_ids %}<span class="tag">hoje</span>{% endif %}
+      <span class="ciclo-acoes">
+        <form method="post" action="{{ url_for('ciclo_mover', iid=it.id, direcao='cima') }}">{{ csrf() }}<button class="ciclo-btn" title="Subir" aria-label="Subir {{ it.nome }}" {{ 'disabled' if loop.first }}>↑</button></form>
+        <form method="post" action="{{ url_for('ciclo_mover', iid=it.id, direcao='baixo') }}">{{ csrf() }}<button class="ciclo-btn" title="Descer" aria-label="Descer {{ it.nome }}" {{ 'disabled' if loop.last }}>↓</button></form>
+        <form method="post" action="{{ url_for('ciclo_remover', iid=it.id) }}">{{ csrf() }}<button class="ciclo-btn perigo" title="Tirar da fila" aria-label="Tirar {{ it.nome }} da fila">×</button></form>
+      </span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="nada">A fila está vazia. Adicione as seções na ordem em que quer estudar.</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('ciclo_adicionar') }}" class="ciclo-add">
+    {{ csrf() }}
+    <select name="materia_id" required aria-label="Seção para adicionar ao ciclo">
+      <option value="">Adicionar seção à fila…</option>
+      {% for m in materias %}<option value="{{ m.id }}">{{ m.nome }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-p">Adicionar</button>
+  </form>
+  <p class="mini">Uma seção pode entrar mais de uma vez, para aparecer com mais frequência.</p>
+</section>
+{% endif %}
+
 {% for m in materias %}
 <section class="sec {{ 'editando' if editando == m.id }}" id="materia-{{ m.id }}" data-bloco>
   <header class="sec-cab">

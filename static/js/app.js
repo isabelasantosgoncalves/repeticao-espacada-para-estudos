@@ -67,6 +67,10 @@
       var modo = modoAtual(form);
       var n = passos[i].getAttribute('data-passo');
       if (n === 'dias') return modo === 'fixa' || modo === 'ambos';
+      if (n === 'secoes_dia') {
+        var d = form.querySelector('input[name="distribuicao"]:checked');
+        return !!d && d.value === 'ciclo';
+      }
       if (n === 'minima') return modo === 'diaria' || modo === 'ambos';
       return true;
     }
@@ -116,6 +120,9 @@
       var modo = modoAtual(form);
       form.querySelector('[data-secao="dias"]').hidden = !(modo === 'fixa' || modo === 'ambos');
       form.querySelector('[data-secao="minima"]').hidden = !(modo === 'diaria' || modo === 'ambos');
+      var dist = form.querySelector('input[name="distribuicao"]:checked');
+      var blocoCiclo = form.querySelector('[data-secao="secoes_dia"]');
+      if (blocoCiclo) blocoCiclo.hidden = !(dist && dist.value === 'ciclo');
       checarDias(form);
     }
     form.addEventListener('change', atualizar);
@@ -194,9 +201,8 @@
   // Fase de aprendizado: mostra a sequência de cada opção já com o ritmo e o
   // máximo de dias escolhidos (mesma conta do servidor: arredonda "meio para o par").
   function arredondar(x) {
-    var f = Math.floor(x), d = x - f;
-    if (Math.abs(d - 0.5) < 1e-9) return f % 2 === 0 ? f : f + 1;
-    return Math.round(x);
+    // mesmo arredondamento do servidor: o "meio" vai para baixo (22,5 -> 22)
+    return Math.ceil(x - 0.5 - 1e-9);
   }
   Revisa.sequencias = function (form) {
     var box = form && form.querySelector('[data-fases]');

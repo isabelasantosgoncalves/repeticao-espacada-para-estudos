@@ -25,7 +25,19 @@ CREATE TABLE IF NOT EXISTS configuracoes (
     aprendizado     TEXT    NOT NULL DEFAULT 'padrao',  -- cautelosa | degraus | padrao | solta
     teto_dias       INTEGER NOT NULL DEFAULT 45,        -- máximo de dias sem revisar um assunto
     adiantar        INTEGER NOT NULL DEFAULT 1,         -- (sem uso) antigo "adiantar revisões"
-    distribuicao    TEXT    NOT NULL DEFAULT 'todas'    -- todas (todo dia) | dias (cada seção tem seus dias)
+    distribuicao    TEXT    NOT NULL DEFAULT 'todas',   -- todas (todo dia) | dias (cada seção tem seus dias) | ciclo
+    secoes_por_dia  INTEGER NOT NULL DEFAULT 2          -- ciclo de estudos: quantas seções por dia
+);
+
+-- Ciclo de estudos: fila de seções que se repete (uma seção pode aparecer mais de uma vez).
+-- rodada = quantas vezes o item já foi feito/pulado; ultimo_dia = quando foi feito por último.
+CREATE TABLE IF NOT EXISTS ciclo_itens (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    materia_id  INTEGER NOT NULL REFERENCES materias(id) ON DELETE CASCADE,
+    posicao     INTEGER NOT NULL,
+    rodada      INTEGER NOT NULL DEFAULT 0,
+    ultimo_dia  TEXT
 );
 
 -- "Seções" na interface (ex.: SAT Math). dias_estudo vazio = todo dia;
@@ -108,6 +120,8 @@ def iniciar_db(caminho: str):
         con.execute("ALTER TABLE configuracoes ADD COLUMN ritmo TEXT NOT NULL DEFAULT 'leve'")
     if "aprendizado" not in colunas:
         con.execute("ALTER TABLE configuracoes ADD COLUMN aprendizado TEXT NOT NULL DEFAULT 'padrao'")
+    if "secoes_por_dia" not in colunas:
+        con.execute("ALTER TABLE configuracoes ADD COLUMN secoes_por_dia INTEGER NOT NULL DEFAULT 2")
     if "distribuicao" not in colunas:
         con.execute("ALTER TABLE configuracoes ADD COLUMN distribuicao TEXT NOT NULL DEFAULT 'todas'")
         # quem já tinha marcado dias numa seção continua usando os dias

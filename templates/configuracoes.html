@@ -9,7 +9,9 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
   <h2>Ritmo de estudo</h2>
-  <p class="sub">Quanto mais intenso, mais cedo cada assunto volta para revisão. Ao trocar, as datas de todos os assuntos são recalculadas.</p>
+  <p class="sub">O Leve usa os intervalos da tabela (3, 4, 7, 15 e 30 dias, do assunto mais fraco ao dominado).
+    O Moderado usa 75% deles e o Intenso, metade: por isso o dominado volta em 30, 22 ou 15 dias.
+    Ao trocar, as datas de todos os assuntos são recalculadas.</p>
   {{ campos.ritmo(cfg) }}
 
   <h2>Assuntos novos</h2>
@@ -23,8 +25,14 @@
   {{ campos.teto(cfg) }}
 
   <h2>Seções na semana</h2>
-  <p class="sub">Se todas as seções entram na revisão todo dia ou só nos dias de cada uma.</p>
+  <p class="sub">Quais seções entram na revisão de cada dia.</p>
   {{ campos.distribuicao(cfg) }}
+
+  <div data-secao="secoes_dia">
+    <h2>Seções por dia no ciclo</h2>
+    <p class="sub">Quantas seções da fila você estuda por dia.</p>
+    {{ campos.secoes_por_dia(cfg) }}
+  </div>
 
   <h2>Quando você revisa</h2>
   {{ campos.modo(cfg) }}

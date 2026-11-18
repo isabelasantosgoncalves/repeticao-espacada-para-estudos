@@ -15,7 +15,7 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 ## Funcionalidades
 
 - **Contas de usuário**: cadastro, login e logout, senhas com hash. Cada usuário só vê e edita os próprios dados (checado no backend em todas as rotas).
-- **Onboarding** no primeiro acesso, antes de entrar no app: ritmo de estudo, fase de aprendizado, máximo de dias sem revisão, como as seções se distribuem na semana, modo de revisão, dia fixo, limite por seção e questões por assunto.
+- **Onboarding** no primeiro acesso, antes de entrar no app: ritmo de estudo, fase de aprendizado, máximo de dias sem revisão, como as seções se distribuem na semana (todas todo dia, dias por seção ou ciclo de estudos), modo de revisão, dia fixo, limite por seção e questões por assunto.
 - **Hoje (painel)**: números do dia (revisões feitas, questões sugeridas, atrasados, domínio médio), a lista de revisões com registro direto na linha (acertos + Enter), uma prévia de **amanhã**, os **vencimentos** dos próximos 7 dias e o progresso nos assuntos ainda não começados.
 - **Registrar prática**: formulário rápido (seção → assunto, data, acertos, total, observação).
 - **Mapa de domínio**: uma lista só, por seção, com barra colorida (vermelho < 50%, amarelo 50–84%, verde ≥ 85%) e o status de cada assunto. Os contadores do topo (*Revisar agora*, *Pode esperar*, *Dominado*) servem de filtro.
@@ -40,9 +40,13 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 |---|---|
 | ![Registrar](docs/prints/registrar.png) | ![Seções](docs/prints/materias.png) |
 
-| Assunto com subassuntos | Configurações |
+| Vencimentos da semana | Assunto com subassuntos |
 |---|---|
-| ![Assunto com subassuntos](docs/prints/grupo.png) | ![Configurações](docs/prints/configuracoes.png) |
+| ![Vencimentos](docs/prints/vencimentos.png) | ![Assunto com subassuntos](docs/prints/grupo.png) |
+
+| Configurações |
+|---|
+| ![Configurações](docs/prints/configuracoes.png) |
 
 ---
 
@@ -72,7 +76,7 @@ A tabela é aplicada ao **domínio** (e não só à última prática), então a 
 
 | Domínio  | Próxima revisão | Questões |
 |----------|-----------------|----------|
-| < 50%    | 2 dias          | 20       |
+| < 50%    | 3 dias          | 20       |
 | 50–69%   | 4 dias          | 15       |
 | 70–84%   | 7 dias          | 10       |
 | 85–94%   | 15 dias         | 6        |
@@ -118,9 +122,9 @@ Em cada degrau, o resultado decide quanto do teto vale:
 
 | Ritmo | Para quem | Fator | Tabela |
 |---|---|---|---|
-| Leve | estudando conteúdo + questões | ×1 | 2 · 4 · 7 · 15 · 30 dias |
+| Leve | estudando conteúdo + questões | ×1 | 3 · 4 · 7 · 15 · 30 dias |
 | Moderado | rotina regular de questões | ×0,75 | 2 · 3 · 5 · 11 · 22 dias |
-| Intenso | fase só de questões | ×0,5 | 1 · 2 · 4 · 8 · 15 dias |
+| Intenso | fase só de questões | ×0,5 | 1 · 2 · 3 · 7 · 15 dias |
 
 Como tudo é calculado a partir do histórico, trocar o ritmo recalcula na hora as datas de todos os
 assuntos.
@@ -169,7 +173,19 @@ seg/qua/sex). Nos outros dias, os assuntos dela não entram na revisão. E se um
 num dia sem estudo daquela seção, ela passa para o próximo dia de estudo **sem contar como atraso**,
 então o esquecimento e a prioridade não punem os dias de folga daquela seção.
 
-### 7. Subassuntos
+### 7. Ciclo de estudos
+
+Para quem não quer amarrar seção a dia da semana (ex.: ENEM com muitas matérias). A pessoa monta
+uma **fila** de seções na tela Seções (uma seção pode aparecer mais de uma vez, para ter mais peso)
+e diz quantas estuda por dia. Cada dia, as **seções da vez** são as próximas da fila:
+
+- registrar uma prática numa seção da vez marca aquela vez como feita; no dia seguinte a fila anda;
+- se a pessoa não estuda num dia, **a fila espera** (nada atrasa);
+- dá para **pular** uma seção no dia; a próxima da fila entra no lugar;
+- a revisão do dia só traz assuntos das seções da vez, e a espera até a seção chegar na vez
+  (até uma volta do ciclo) **não conta como atraso**.
+
+### 8. Subassuntos
 
 A hierarquia é **seção → assunto → subassunto** (um nível de subassunto). Quando um assunto ganha
 subassuntos, ele vira um **grupo**: as práticas são registradas nos subassuntos, e só eles entram nas

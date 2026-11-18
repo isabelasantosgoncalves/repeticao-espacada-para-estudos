@@ -56,6 +56,22 @@
           {% endif %}
           {% if pausadas %}· fora hoje: {{ pausadas | join(', ') }}{% endif %}
         </p>
+        {% if vez %}
+        <div class="vez-hoje">
+          <span class="vez-rotulo">Seções de hoje</span>
+          {% for it in vez %}
+          <span class="vez-chip {{ 'feito' if it.feito }}">
+            {{ it.nome }}{% if it.feito %} ✓{% else %}
+            <form method="post" action="{{ url_for('ciclo_pular', iid=it.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="vez-pular" title="Pular {{ it.nome }} hoje">pular</button>
+            </form>{% endif %}
+          </span>
+          {% endfor %}
+        </div>
+        {% elif cfg.distribuicao == 'ciclo' %}
+        <p class="mini">Monte a fila do ciclo em <a href="{{ url_for('materias') }}#ciclo">Seções</a>.</p>
+        {% endif %}
       </div>
     </div>
 
@@ -137,22 +153,23 @@
       {% else %}
       <p class="mini">Nada para revisar amanhã.</p>
       {% endif %}
+      {% if amanha.vez %}<p class="mini">Seções: {{ amanha.vez | map(attribute='nome') | join(', ') }}</p>{% endif %}
       {% if amanha.pausadas %}<p class="mini">Amanhã não é dia de: {{ amanha.pausadas | join(', ') }}.</p>{% endif %}
     </section>
 
     <section class="bloco">
-      <h2 class="lat-tit">Vencimentos <small class="lat-sub">próximos 7 dias</small></h2>
+      <h2 class="lat-tit"><a class="lat-link" href="{{ url_for('vencimentos') }}">Vencimentos</a> <small class="lat-sub">próximos 7 dias</small></h2>
       <ul class="agenda">
         {% for p in proximos %}
         <li>
-          <span class="ag-dia">{{ NOMES_DIAS[p.data.weekday()][:3] | lower }} {{ p.data.strftime('%d/%m') }}</span>
+          <a class="ag-dia" href="{{ url_for('vencimentos') }}#dia-{{ p.data.isoformat() }}">{{ NOMES_DIAS[p.data.weekday()][:3] | lower }} {{ p.data.strftime('%d/%m') }}</a>
           <span class="ag-barra"><i style="width: {{ (p.n / max_proximos * 100) | round }}%"></i></span>
           <span class="ag-n">{{ p.n or '—' }}</span>
         </li>
         {% endfor %}
       </ul>
       <p class="mini">Assuntos que vencem em cada dia.</p>
-      <a class="lat-rodape" href="{{ url_for('mapa') }}">Ver o mapa de domínio →</a>
+      <a class="lat-rodape" href="{{ url_for('vencimentos') }}">Ver a semana completa →</a>
     </section>
 
   </aside>

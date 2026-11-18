@@ -33,7 +33,7 @@ TABELA = (
     (0.85, 15, 6),   # 85–94%
     (0.70, 7, 10),   # 70–84%
     (0.50, 4, 15),   # 50–69%
-    (0.00, 2, 20),   # < 50%
+    (0.00, 3, 20),   # < 50%
 )
 
 LIMIAR_BOM = 0.85          # sessões >= 85% contam para o bônus
@@ -227,8 +227,12 @@ def intervalo_na_fase(teto_fase: int, dom: float) -> int:
 
 
 def aplicar_ritmo(intervalo: int, fator: float) -> int:
-    """Intervalo ajustado ao ritmo de estudo (ex.: 30 dias x 0,75 = 22)."""
-    return max(1, round(intervalo * fator))
+    """
+    Intervalo ajustado ao ritmo de estudo, arredondando o "meio" para baixo
+    (ex.: 30 x 0,75 = 22,5 -> 22; 3 x 0,5 = 1,5 -> 1). Assim o assunto fraco
+    volta em 3 dias no Leve, 2 no Moderado e 1 no Intenso.
+    """
+    return max(1, ceil(intervalo * fator - 0.5 - 1e-9))
 
 
 def fator_do_ritmo(ritmo: str | None) -> float:
@@ -301,6 +305,7 @@ def analisar_assunto(
     tetos: tuple[int, ...] = TETOS_APRENDIZADO,
     teto: int | None = None,
     dias_estudo: list[int] | None = None,
+    folga: int = 0,
 ) -> EstadoAssunto | None:
     """
     Calcula o estado de um assunto a partir das suas sessões.
@@ -318,7 +323,9 @@ def analisar_assunto(
     ultima_data = sessoes[-1][0]
     # Revisão que cairia num dia sem estudo daquela seção vai para o próximo dia de estudo.
     proxima = ajustar_para_dia_de_estudo(ultima_data + timedelta(days=intervalo), dias_estudo)
-    atraso = dias_de_atraso(proxima, hoje)
+    # `folga`: no ciclo de estudos, a seção pode demorar alguns dias para chegar
+    # na vez; esses dias de espera não contam como atraso.
+    atraso = max(0, dias_de_atraso(proxima, hoje) - folga)
     dom_ef = dominio_efetivo(dom, atraso)
 
     return EstadoAssunto(
@@ -463,6 +470,36 @@ def selecionar_revisao_completa(estados: list[EstadoAssunto], hoje: date) -> lis
     venceu, da maior para a menor prioridade. Sem limite de assuntos.
     """
     return ordenar_por_prioridade([e for e in estados if e.proxima_revisao <= hoje])
+
+
+# ---------------------------------------------------------------------------
+# Ciclo de estudos
+# ---------------------------------------------------------------------------
+
+def secoes_da_vez(itens: list[dict], k: int, dia: date) -> list[dict]:
+    """
+    Ciclo de estudos: fila de seções que se repete. Cada item tem `posicao`
+    (ordem na fila), `rodada` (quantas vezes já foi feito/pulado) e
+    `ultimo_dia` (data em que foi feito pela última vez).
+
+    A vez do dia são os k primeiros pela ordem (rodada, posicao). Um item
+    feito HOJE conta com a rodada anterior, para continuar aparecendo (com ✓)
+    até o fim do dia em vez de dar lugar ao próximo. Se a pessoa não estuda
+    num dia, nada muda: a fila espera.
+    """
+    if k <= 0:
+        return []
+    def chave(it):
+        feito_hoje = it.get("ultimo_dia") == dia
+        return (it["rodada"] - (1 if feito_hoje else 0), it["posicao"])
+    return sorted(itens, key=chave)[:k]
+
+
+def folga_do_ciclo(n_itens: int, k: int) -> int:
+    """Dias que uma seção pode esperar a vez dela numa volta do ciclo."""
+    if n_itens <= 0 or k <= 0:
+        return 0
+    return max(0, ceil(n_itens / k) - 1)
 
 
 def classificar_para_mapa(estado: EstadoAssunto, hoje: date) -> str:

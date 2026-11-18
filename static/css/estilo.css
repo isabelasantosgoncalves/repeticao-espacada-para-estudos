@@ -587,3 +587,52 @@ button.mr.on span { color: var(--acento); font-weight: 600; }
 .lat-sub { font-family: var(--mono); font-size: .7rem; font-weight: 400; color: var(--texto-3); text-transform: uppercase; letter-spacing: .06em; margin-left: 6px; }
 .lm-data { font-size: .8rem; }
 .opcao-meta span { display: inline; }
+
+/* ciclo de estudos (tela Seções) */
+.ciclo-painel { background: var(--superficie); border: 1px solid var(--linha); border-left: 4px solid var(--latao); border-radius: var(--raio); padding: 18px 22px; margin-bottom: 32px; box-shadow: var(--sombra); scroll-margin-top: 80px; }
+.ciclo-cab { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.ciclo-cab h2 { margin: 0; }
+.ciclo-fila { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.ciclo-fila li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--linha); border-radius: 6px; }
+.ciclo-fila li.vez { border-color: var(--acento); background: var(--acento-claro); }
+.ciclo-pos { font-family: var(--mono); font-size: .76rem; color: var(--texto-3); width: 22px; }
+.ciclo-nome { font-weight: 500; }
+.ciclo-acoes { margin-left: auto; display: flex; gap: 4px; }
+.ciclo-acoes form { margin: 0; }
+.ciclo-btn { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--linha-forte); background: var(--superficie); color: var(--texto-2); cursor: pointer; font-size: .9rem; line-height: 1; }
+.ciclo-btn:hover:not([disabled]) { border-color: var(--acento); color: var(--acento); }
+.ciclo-btn[disabled] { opacity: .35; cursor: default; }
+.ciclo-btn.perigo { color: var(--vermelho); }
+.ciclo-add { display: flex; gap: 8px; max-width: 460px; }
+.ciclo-add select { flex: 1; }
+
+/* seções da vez (ciclo) na tela Hoje */
+.vez-hoje { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.vez-rotulo { font-family: var(--mono); font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-3); margin-right: 4px; }
+.vez-chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; border: 1px solid var(--acento); border-radius: 4px; background: var(--acento-claro); color: var(--acento-escuro); font-weight: 500; font-size: .88rem; }
+.vez-chip.feito { border-color: var(--verde); background: var(--verde-claro); color: #23573a; padding-right: 12px; }
+.vez-chip form { margin: 0; }
+.vez-pular { font: inherit; font-size: .74rem; border: 0; background: transparent; color: var(--texto-3); cursor: pointer; text-decoration: underline; }
+
+/* vencimentos da semana */
+.lat-link { color: inherit; }
+.lat-link:hover { color: var(--acento); }
+a.ag-dia { color: var(--texto-2); }
+a.ag-dia:hover { color: var(--acento); }
+.vc-periodo { display: flex; gap: 6px; }
+.vc-dia { padding: 16px 22px; scroll-margin-top: 80px; }
+.vc-dia h2 { font-size: 1.2rem; margin: 0 0 8px; display: flex; align-items: baseline; gap: 8px; }
+.vc-data { font-family: var(--mono); font-size: .76rem; color: var(--texto-3); font-weight: 400; }
+.vc-dia.vazio-dia { padding: 12px 22px; }
+.vc-dia.vazio-dia h2 { margin: 0; }
+.vc-dia.vazio-dia .nada { display: none; }
+.vc-dia.vazio-dia h2::after { content: "nada vence"; font-family: var(--mono); font-size: .74rem; color: var(--texto-3); font-weight: 400; margin-left: auto; }
+.vc-atrasados { border-left: 4px solid var(--vermelho); }
+.vc-lista { list-style: none; margin: 0; padding: 0; }
+.vc-lista li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 48px; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--linha); }
+.vc-lista li:first-child { border-top: 0; }
+.vc-lista .ponto { margin: 0; }
+.vc-lista a { color: var(--texto); font-weight: 500; }
+.vc-lista small { font-size: .8rem; }
+.vc-dom { font-family: var(--mono); font-size: .8rem; text-align: right; color: var(--texto-2); }
+@media (max-width: 640px) { .vc-lista li { grid-template-columns: 10px 1fr 44px; } .vc-lista small { grid-column: 2; } }

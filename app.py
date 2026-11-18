@@ -141,6 +141,17 @@ def cor_dominio(valor: float) -> str:
 
 
 def registrar_filtros(app):
+    def estatico(arquivo: str) -> str:
+        """URL de um arquivo estático com ?v=<data de modificação>: quando o
+        arquivo muda, o endereço muda e o navegador não usa a versão em cache."""
+        caminho = os.path.join(app.static_folder, arquivo)
+        try:
+            versao = int(os.path.getmtime(caminho))
+        except OSError:
+            versao = 0
+        return url_for("static", filename=arquivo, v=versao)
+
+    app.jinja_env.globals["estatico"] = estatico
     app.jinja_env.filters.update(br=br, relativo=relativo, pct=pct, cor=cor_dominio)
     # Sugestão de teto para cada combinação ritmo × fase (usada no onboarding/Configurações)
     sugestoes = {r: {f: L.sugerir_teto(r, f) for f in L.FASES_APRENDIZADO} for r in L.RITMOS}
@@ -185,7 +196,7 @@ def validar_data(texto) -> date:
 
 def do_usuario(tabela: str, id_: int):
     """Busca um registro do usuário logado ou responde 404."""
-    assert tabela in ("materias", "assuntos", "sessoes")
+    assert tabela in ("materias", "assuntos", "sessoes", "ciclo_itens")
     row = banco.get_db().execute(
         f"SELECT * FROM {tabela} WHERE id = ? AND usuario_id = ?", (id_, current_user.id)
     ).fetchone()
@@ -429,6 +440,10 @@ def registrar_rotas(app: Flask):
         db.executemany(
             "INSERT INTO sessoes (usuario_id, assunto_id, data, acertos, total, observacao) VALUES (?, ?, ?, ?, ?, ?)",
             linhas)
+        cfg = S.carregar_config(db, current_user.id)
+        for linha in linhas:
+            mid = db.execute("SELECT materia_id FROM assuntos WHERE id = ?", (linha[1],)).fetchone()[0]
+            S.marcar_ciclo(db, current_user.id, mid, S.hoje(), cfg)
         db.commit()
         flash(f"{len(linhas)} resultado(s) registrado(s). Bom trabalho!", "ok")
         return redirect(url_for("hoje") + "#revisao")
@@ -471,6 +486,10 @@ def registrar_rotas(app: Flask):
                         """INSERT INTO sessoes (usuario_id, assunto_id, data, acertos, total, observacao)
                            VALUES (?, ?, ?, ?, ?, ?)""",
                         (current_user.id, aid, d.isoformat(), acertos, total, obs))
+                    if d == S.hoje():
+                        assunto_reg = do_usuario("assuntos", aid)
+                        S.marcar_ciclo(db, current_user.id, assunto_reg["materia_id"], d,
+                                       S.carregar_config(db, current_user.id))
                     msg = f"Prática registrada: {acertos}/{total} ({round(acertos / total * 100)}%)."
                 db.commit()
                 flash(msg, "ok")
@@ -498,6 +517,13 @@ def registrar_rotas(app: Flask):
         return redirect(url_for("historico", aid=s["assunto_id"]))
 
     # ------------------------------------------------------------------- mapa
+
+    @app.route("/vencimentos")
+    @login_required
+    def vencimentos():
+        n = 14 if request.args.get("dias") == "14" else 7
+        dados = S.montar_vencimentos(banco.get_db(), current_user.id, S.hoje(), n)
+        return render_template("vencimentos.html", n_dias=n, **dados)
 
     @app.route("/mapa")
     @login_required
@@ -550,8 +576,10 @@ def registrar_rotas(app: Flask):
     @app.route("/materias")
     @login_required
     def materias():
+        cfg_m = S.carregar_config(banco.get_db(), current_user.id)
         return render_template("materias.html", materias=materias_com_assuntos(current_user.id),
-                               cfg=S.carregar_config(banco.get_db(), current_user.id),
+                               cfg=cfg_m, ciclo=S.ler_ciclo(banco.get_db(), current_user.id),
+                               vez_ids=[it["id"] for it in S.vez_do_ciclo(banco.get_db(), current_user.id, S.hoje(), cfg_m)],
                                editando=request.args.get("editar", type=int))
 
     def executar(acao, ok_msg, mid=None):
@@ -661,6 +689,74 @@ def registrar_rotas(app: Flask):
         def acao():
             banco.get_db().execute("DELETE FROM assuntos WHERE id = ? AND usuario_id = ?", (aid, current_user.id))
         return executar(acao, "Excluído, com as práticas.", assunto["materia_id"])
+
+    # ---------------------------------------------------------- ciclo de estudos
+
+    def voltar_ciclo():
+        return redirect(url_for("materias") + "#ciclo")
+
+    def renumerar_ciclo(db):
+        ids = [r["id"] for r in db.execute(
+            "SELECT id FROM ciclo_itens WHERE usuario_id = ? ORDER BY posicao, id", (current_user.id,))]
+        for pos, iid in enumerate(ids):
+            db.execute("UPDATE ciclo_itens SET posicao = ? WHERE id = ?", (pos, iid))
+
+    @app.route("/ciclo/adicionar", methods=["POST"])
+    @login_required
+    def ciclo_adicionar():
+        mid = request.form.get("materia_id", type=int)
+        if not mid:
+            flash("Escolha uma seção para adicionar ao ciclo.", "erro")
+            return voltar_ciclo()
+        do_usuario("materias", mid)
+        db = banco.get_db()
+        fim = db.execute("SELECT COALESCE(MAX(posicao), -1) + 1 FROM ciclo_itens WHERE usuario_id = ?",
+                         (current_user.id,)).fetchone()[0]
+        # entra na rodada atual mais baixa, para não furar nem ficar para trás na fila
+        rodada = db.execute("SELECT COALESCE(MIN(rodada), 0) FROM ciclo_itens WHERE usuario_id = ?",
+                            (current_user.id,)).fetchone()[0]
+        db.execute("INSERT INTO ciclo_itens (usuario_id, materia_id, posicao, rodada) VALUES (?, ?, ?, ?)",
+                   (current_user.id, mid, fim, rodada))
+        db.commit()
+        return voltar_ciclo()
+
+    @app.route("/ciclo/<int:iid>/mover/<direcao>", methods=["POST"])
+    @login_required
+    def ciclo_mover(iid, direcao):
+        do_usuario("ciclo_itens", iid)
+        db = banco.get_db()
+        renumerar_ciclo(db)
+        ids = [r["id"] for r in db.execute(
+            "SELECT id FROM ciclo_itens WHERE usuario_id = ? ORDER BY posicao", (current_user.id,))]
+        i = ids.index(iid)
+        j = i - 1 if direcao == "cima" else i + 1
+        if 0 <= j < len(ids):
+            ids[i], ids[j] = ids[j], ids[i]
+            for pos, x in enumerate(ids):
+                db.execute("UPDATE ciclo_itens SET posicao = ? WHERE id = ?", (pos, x))
+        db.commit()
+        return voltar_ciclo()
+
+    @app.route("/ciclo/<int:iid>/remover", methods=["POST"])
+    @login_required
+    def ciclo_remover(iid):
+        do_usuario("ciclo_itens", iid)
+        db = banco.get_db()
+        db.execute("DELETE FROM ciclo_itens WHERE id = ? AND usuario_id = ?", (iid, current_user.id))
+        renumerar_ciclo(db)
+        db.commit()
+        return voltar_ciclo()
+
+    @app.route("/ciclo/<int:iid>/pular", methods=["POST"])
+    @login_required
+    def ciclo_pular(iid):
+        """Passa a vez da seção hoje: ela vai para o fim da rodada e entra a próxima."""
+        do_usuario("ciclo_itens", iid)
+        db = banco.get_db()
+        db.execute("UPDATE ciclo_itens SET rodada = rodada + 1 WHERE id = ? AND usuario_id = ?",
+                   (iid, current_user.id))
+        db.commit()
+        return redirect(url_for("hoje"))
 
     # ----------------------------------------------------------- configurações
 

@@ -2,7 +2,7 @@
 {% macro ritmo(cfg) %}
 <div class="opcoes">
   {% for valor, titulo, desc, forte, fraco in [
-      ('leve', 'Leve', 'Estou aprendendo o conteúdo e faço questões aos poucos.', '30 dias', '2 dias'),
+      ('leve', 'Leve', 'Estou aprendendo o conteúdo e faço questões aos poucos.', '30 dias', '3 dias'),
       ('moderado', 'Moderado', 'Já tenho a base e faço questões com regularidade.', '22 dias', '2 dias'),
       ('intenso', 'Intenso', 'Estou na fase só de questões, todos os dias.', '15 dias', '1 dia')] %}
   <label class="opcao">
@@ -53,13 +53,21 @@
 <div class="opcoes">
   {% for valor, titulo, desc in [
       ('todas', 'Estudo todas as seções todo dia', 'Ex.: SAT Math e SAT English, todos os dias.'),
-      ('dias', 'Cada seção tem seus dias', 'Ex.: ENEM, com Biologia seg/qua e Química ter/qui. Você marca os dias de cada seção na tela Seções.')] %}
+      ('dias', 'Cada seção tem seus dias', 'Ex.: ENEM, com Biologia seg/qua e Química ter/qui. Você marca os dias de cada seção na tela Seções.'),
+      ('ciclo', 'Ciclo de estudos', 'Uma fila de seções que se repete. Cada dia você estuda as próximas da fila; se não estudar num dia, a fila espera. Você monta a fila na tela Seções.')] %}
   <label class="opcao">
     <input type="radio" name="distribuicao" value="{{ valor }}" {{ 'checked' if cfg.distribuicao == valor }} required>
     <span><b>{{ titulo }}</b><small>{{ desc }}</small></span>
   </label>
   {% endfor %}
 </div>
+{% endmacro %}
+
+{% macro secoes_por_dia(cfg) %}
+<label class="campo-num">
+  <input type="number" name="secoes_por_dia" min="1" max="10" value="{{ cfg.secoes_por_dia }}" required>
+  <span>seções por dia</span>
+</label>
 {% endmacro %}
 
 {% macro modo(cfg) %}

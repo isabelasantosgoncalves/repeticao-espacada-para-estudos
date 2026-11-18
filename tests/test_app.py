@@ -237,6 +237,43 @@ class TestApp(unittest.TestCase):
         self.assertNotIn("Alfa", amanha)   # 100%: bom, volta em 3 dias
         self.assertIn("Vencimentos", html)
 
+    def test_ciclo_de_estudos(self):
+        hoje = S.hoje()
+        self.criar_usuario("ci@ci.com")
+        self.post("/configuracoes", {"ritmo": "leve", "aprendizado": "padrao", "teto_dias": "45",
+                                     "distribuicao": "ciclo", "secoes_por_dia": "2", "modo": "diaria",
+                                     "revisao_minima": "2", "questoes_modo": "auto", "questoes_fixas": "10"},
+                  "/configuracoes")
+        for nome in ("Matemática", "Biologia", "História"):
+            self.post("/materias/nova", {"nome": nome}, "/materias")
+        for mid in ("1", "2", "3"):
+            self.post("/ciclo/adicionar", {"materia_id": mid}, "/materias")
+        self.post("/assuntos/novo", {"nome": "Funções", "materia_id": "1"}, "/materias")
+
+        def vez():
+            html = self.c.get("/hoje").get_data(as_text=True)
+            bloco = html.split('class="vez-hoje"')[1].split("</div>")[0]
+            return [n for n in ("Matemática", "Biologia", "História") if n in bloco], bloco
+
+        nomes, _ = vez()
+        self.assertEqual(nomes, ["Matemática", "Biologia"])
+        # praticou Matemática hoje: continua na vez (com ✓) e amanhã vêm Biologia e História
+        self.post("/sessoes/nova", {"assunto_id": "1", "data": hoje.isoformat(), "acertos": "8", "total": "10"},
+                  "/sessoes/nova")
+        nomes, bloco = vez()
+        self.assertEqual(nomes, ["Matemática", "Biologia"])
+        self.assertIn("✓", bloco)
+        html = self.c.get("/hoje").get_data(as_text=True)
+        amanha = html.split('class="bloco amanha"')[1].split("</section>")[0]
+        self.assertIn("Seções: Biologia, História", amanha)
+        # pular Biologia: entra História no lugar
+        self.post("/ciclo/2/pular", {}, "/hoje")
+        nomes, _ = vez()
+        self.assertEqual(nomes, ["Matemática", "História"])
+        # a fila vai junto no exportar
+        self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["ciclo"],
+                         ["Matemática", "Biologia", "História"])
+
     def test_pwa(self):
         r = self.c.get("/manifest.webmanifest")
         self.assertEqual(r.status_code, 200)

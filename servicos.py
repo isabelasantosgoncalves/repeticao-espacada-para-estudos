@@ -138,17 +138,59 @@ def sessoes_por_assunto(db, uid: int, antes_de: date | None = None) -> dict[int,
     return res
 
 
+# ---------------------------------------------------------------------------
+# Ciclo de estudos
+# ---------------------------------------------------------------------------
+
+def usa_ciclo(cfg: dict) -> bool:
+    return cfg.get("distribuicao") == "ciclo"
+
+
+def ler_ciclo(db, uid: int) -> list[dict]:
+    """Itens do ciclo, na ordem da fila."""
+    res = []
+    for r in db.execute(
+            """SELECT c.id, c.materia_id, c.posicao, c.rodada, c.ultimo_dia, m.nome
+               FROM ciclo_itens c JOIN materias m ON m.id = c.materia_id
+               WHERE c.usuario_id = ? ORDER BY c.posicao, c.id""", (uid,)):
+        it = dict(r)
+        it["ultimo_dia"] = para_data(it["ultimo_dia"]) if it["ultimo_dia"] else None
+        res.append(it)
+    return res
+
+
+def vez_do_ciclo(db, uid: int, dia: date, cfg: dict) -> list[dict]:
+    """Seções da vez no dia (com `feito` = já estudada nesse dia)."""
+    vez = L.secoes_da_vez(ler_ciclo(db, uid), cfg.get("secoes_por_dia", 2), dia)
+    return [dict(it, feito=it["ultimo_dia"] == dia) for it in vez]
+
+
+def marcar_ciclo(db, uid: int, materia_id: int, dia: date, cfg: dict):
+    """Registrou prática numa seção da vez: aquele item do ciclo conta como feito."""
+    if not usa_ciclo(cfg):
+        return
+    for it in vez_do_ciclo(db, uid, dia, cfg):
+        if it["materia_id"] == materia_id and not it["feito"]:
+            db.execute("UPDATE ciclo_itens SET rodada = rodada + 1, ultimo_dia = ? WHERE id = ? AND usuario_id = ?",
+                       (dia.isoformat(), it["id"], uid))
+            return
+
+
 def estados(db, uid: int, dia: date, cfg: dict, antes_de: date | None = None,
             ids: set[int] | None = None) -> dict[int, L.EstadoAssunto]:
     """Estado de cada assunto que já tem sessões (só os de `ids`, se informado)."""
     fixas = questoes_fixas(cfg)
     dias = dias_por_assunto(db, uid, cfg)
+    folga = 0
+    if usa_ciclo(cfg):
+        n_itens = db.execute("SELECT COUNT(*) FROM ciclo_itens WHERE usuario_id = ?", (uid,)).fetchone()[0]
+        folga = L.folga_do_ciclo(n_itens, cfg.get("secoes_por_dia", 2))
     res = {}
     for aid, sess in sessoes_por_assunto(db, uid, antes_de).items():
         if ids is not None and aid not in ids:
             continue
         e = L.analisar_assunto(aid, sess, dia, fixas, fator=fator(cfg), tetos=tetos(cfg),
-                               teto=cfg.get("teto_dias"), dias_estudo=dias.get(aid))
+                               teto=cfg.get("teto_dias"), dias_estudo=dias.get(aid), folga=folga)
         if e:
             res[aid] = e
     return res
@@ -175,6 +217,12 @@ def selecao_do_dia(db, uid: int, dia: date, cfg: dict, assuntos: dict) -> dict:
     pausadas = {a["materia"] for a in assuntos.values() if not L.estuda_no_dia(dia, a["dias_materia"])}
     est = {aid: e for aid, e in est.items() if L.estuda_no_dia(dia, assuntos[aid]["dias_materia"])}
 
+    # Ciclo de estudos: só as seções da vez entram na revisão do dia.
+    vez = vez_do_ciclo(db, uid, dia, cfg) if usa_ciclo(cfg) else []
+    if vez:
+        da_vez = {it["materia_id"] for it in vez}
+        est = {aid: e for aid, e in est.items() if assuntos[aid]["materia_id"] in da_vez}
+
     if tipo == "grande":
         selecao = L.selecionar_revisao_grande(list(est.values()), dia, proximo_fixo)
     elif tipo == "diaria":
@@ -186,7 +234,7 @@ def selecao_do_dia(db, uid: int, dia: date, cfg: dict, assuntos: dict) -> dict:
         selecao = []
 
     return {"tipo": tipo, "proximo_fixo": proximo_fixo, "selecao": [e for e in selecao if e.assunto_id in assuntos],
-            "pausadas": pausadas}
+            "pausadas": pausadas, "vez": vez}
 
 
 def montar_hoje(db, uid: int, dia: date) -> dict:
@@ -201,7 +249,7 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     assuntos = {a["id"]: a for a in listar_folhas(db, uid)}   # grupos não entram na revisão
     sel = selecao_do_dia(db, uid, dia, cfg, assuntos)
     tipo, proximo_fixo, selecao = sel["tipo"], sel["proximo_fixo"], sel["selecao"]
-    pausadas = sel["pausadas"]
+    pausadas, vez = sel["pausadas"], sel["vez"]
 
     # Prévia de amanhã: mesmas regras, já contando as práticas de hoje.
     amanha_dia = dia + timedelta(days=1)
@@ -212,6 +260,7 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
         "itens": [{"assunto": assuntos[e.assunto_id], "estado": e} for e in sel_am["selecao"]],
         "questoes": sum(e.questoes for e in sel_am["selecao"]),
         "pausadas": sorted(sel_am["pausadas"], key=chave_ordem),
+        "vez": sel_am["vez"],
     }
 
     # Sessões já registradas hoje
@@ -262,8 +311,24 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
         "fixas": questoes_fixas(cfg),
         "tem_assuntos": bool(assuntos),
         "pausadas": sorted(pausadas, key=chave_ordem),
+        "vez": vez,
         "amanha": amanha,
     }
+
+
+def montar_vencimentos(db, uid: int, dia: date, n_dias: int = 7) -> dict:
+    """Panorama da semana: o que já venceu e o que vence em cada um dos próximos dias."""
+    cfg = carregar_config(db, uid)
+    assuntos = {a["id"]: a for a in listar_folhas(db, uid)}
+    est = estados(db, uid, dia, cfg, ids=set(assuntos))
+    item = lambda e: {"assunto": assuntos[e.assunto_id], "estado": e}
+    ordem = lambda lista: sorted(lista, key=lambda x: (x["assunto"]["materia"], -x["estado"].prioridade))
+    vencidos = ordem([item(e) for e in est.values() if e.proxima_revisao < dia])
+    dias = []
+    for i in range(n_dias):
+        d = dia + timedelta(days=i)
+        dias.append({"data": d, "itens": ordem([item(e) for e in est.values() if e.proxima_revisao == d])})
+    return {"vencidos": vencidos, "dias": dias, "cfg": cfg}
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +400,9 @@ def exportar(db, uid: int) -> dict:
             "aprendizado": cfg["aprendizado"],
             "teto_dias": cfg["teto_dias"],
             "distribuicao": cfg["distribuicao"],
+            "secoes_por_dia": cfg["secoes_por_dia"],
         },
+        "ciclo": [it["nome"] for it in ler_ciclo(db, uid)],
         "materias": materias,
     }
 
@@ -417,6 +484,14 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
                     gravar(nome_s, sessoes_s, aid)
         if cfg_nova:
             salvar_config(db, uid, cfg_nova, commit=False)
+        # ciclo de estudos (pelos nomes das seções importadas)
+        if isinstance(dados.get("ciclo"), list):
+            db.execute("DELETE FROM ciclo_itens WHERE usuario_id = ?", (uid,))
+            ids = {r["nome"]: r["id"] for r in db.execute("SELECT id, nome FROM materias WHERE usuario_id = ?", (uid,))}
+            for pos, nome in enumerate(dados["ciclo"]):
+                if str(nome) in ids:
+                    db.execute("INSERT INTO ciclo_itens (usuario_id, materia_id, posicao) VALUES (?, ?, ?)",
+                               (uid, ids[str(nome)], pos))
         db.commit()
     except Exception:
         db.rollback()
@@ -455,11 +530,15 @@ def validar_config(form: dict) -> dict:
     if not L.TETO_MIN <= teto <= L.TETO_MAX:
         raise ValueError(f"O máximo de dias sem revisão deve ficar entre {L.TETO_MIN} e {L.TETO_MAX}.")
     distribuicao = form.get("distribuicao") or "todas"
-    if distribuicao not in ("todas", "dias"):
+    if distribuicao not in ("todas", "dias", "ciclo"):
         raise ValueError("Escolha como você distribui as seções na semana.")
+    por_dia = int(form.get("secoes_por_dia") or 2)
+    if not 1 <= por_dia <= 10:
+        raise ValueError("O ciclo deve ter de 1 a 10 seções por dia.")
     return {"modo": modo, "dias_fixos": dias, "revisao_minima": minima,
             "questoes_modo": qmodo, "questoes_fixas": qfixas, "ritmo": ritmo,
-            "aprendizado": aprendizado, "teto_dias": teto, "distribuicao": distribuicao}
+            "aprendizado": aprendizado, "teto_dias": teto, "distribuicao": distribuicao,
+            "secoes_por_dia": por_dia}
 
 
 def salvar_config(db, uid: int, dados: dict, commit: bool = True):
@@ -468,9 +547,9 @@ def salvar_config(db, uid: int, dados: dict, commit: bool = True):
     db.execute(
         """UPDATE configuracoes SET modo = ?, dias_fixos = ?, revisao_minima = ?,
            questoes_modo = ?, questoes_fixas = ?, ritmo = ?, aprendizado = ?, teto_dias = ?,
-           distribuicao = ? WHERE usuario_id = ?""",
+           distribuicao = ?, secoes_por_dia = ? WHERE usuario_id = ?""",
         (c["modo"], ",".join(map(str, c["dias_fixos"])), c["revisao_minima"],
          c["questoes_modo"], c["questoes_fixas"], c["ritmo"], c["aprendizado"], c["teto_dias"],
-         c["distribuicao"], uid))
+         c["distribuicao"], c["secoes_por_dia"], uid))
     if commit:
         db.commit()

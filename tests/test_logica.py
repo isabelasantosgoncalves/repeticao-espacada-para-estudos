@@ -26,7 +26,7 @@ def estado(aid, dom_ef, prio, proxima=HOJE):
 
 class TestTabela(unittest.TestCase):
     def test_faixas(self):
-        self.assertEqual(L.faixa_da_tabela(0.49), (2, 20))
+        self.assertEqual(L.faixa_da_tabela(0.49), (3, 20))
         self.assertEqual(L.faixa_da_tabela(0.50), (4, 15))
         self.assertEqual(L.faixa_da_tabela(0.69), (4, 15))
         self.assertEqual(L.faixa_da_tabela(0.70), (7, 10))
@@ -63,7 +63,7 @@ class TestTabela(unittest.TestCase):
 
 class TestIntervalo(unittest.TestCase):
     def test_uma_sessao_usa_tabela(self):
-        self.assertEqual(ci([0.4]), (2, 0))
+        self.assertEqual(ci([0.4]), (3, 0))
         self.assertEqual(ci([0.75]), (7, 0))
         self.assertEqual(ci([0.9]), (15, 1))
 
@@ -104,7 +104,7 @@ class TestIntervalo(unittest.TestCase):
         self.assertEqual(ci([0.9, 0.9, 0.8]), (15, 0))
 
     def test_quedas_seguidas_chegam_ao_fundo_da_tabela(self):
-        self.assertEqual(ci([0.3, 0.3, 0.3])[0], 2)
+        self.assertEqual(ci([0.3, 0.3, 0.3])[0], 3)
 
     def test_sequencia_recomeca(self):
         # sequência quebrada: domínio 81% -> 7 dias, sequência 1
@@ -368,9 +368,9 @@ class TestRitmo(unittest.TestCase):
         self.assertEqual(L.fator_do_ritmo(None), 1.0)
 
     def test_tabela_em_cada_ritmo(self):
-        tabela = [2, 4, 7, 15, 30]
+        tabela = [3, 4, 7, 15, 30]
         self.assertEqual([L.aplicar_ritmo(d, 0.75) for d in tabela], [2, 3, 5, 11, 22])
-        self.assertEqual([L.aplicar_ritmo(d, 0.5) for d in tabela], [1, 2, 4, 8, 15])
+        self.assertEqual([L.aplicar_ritmo(d, 0.5) for d in tabela], [1, 2, 3, 7, 15])
 
     def test_ritmo_vale_para_o_bonus(self):
         base = L.calcular_intervalo([1.0] * 4, [5] * 4)[0]          # 60
@@ -379,7 +379,7 @@ class TestRitmo(unittest.TestCase):
     def test_estado_usa_fator(self):
         d = HOJE - timedelta(days=1)
         e = L.analisar_assunto(1, [(d, 5, 5)], HOJE, fator=0.5)
-        self.assertEqual(e.intervalo, 4)          # teto 7 x 0,5
+        self.assertEqual(e.intervalo, 3)          # teto 7 x 0,5 = 3,5 -> 3
 
 
 
@@ -424,6 +424,43 @@ class TestDiasDaSecao(unittest.TestCase):
         self.assertEqual(livre.proxima_revisao, HOJE)
         self.assertEqual(secao.proxima_revisao, HOJE + timedelta(days=1))
         self.assertEqual(secao.atraso, 0)
+
+
+class TestCiclo(unittest.TestCase):
+    def itens(self, *rodadas, ultimo=None):
+        return [{"id": i, "materia_id": i, "posicao": i, "rodada": r, "ultimo_dia": (ultimo or {}).get(i)}
+                for i, r in enumerate(rodadas)]
+
+    def ids(self, lista):
+        return [it["id"] for it in lista]
+
+    def test_comeca_pelo_inicio_da_fila(self):
+        self.assertEqual(self.ids(L.secoes_da_vez(self.itens(0, 0, 0, 0), 2, HOJE)), [0, 1])
+
+    def test_feito_hoje_continua_na_vez_ate_o_fim_do_dia(self):
+        itens = self.itens(1, 0, 0, 0, ultimo={0: HOJE})
+        self.assertEqual(self.ids(L.secoes_da_vez(itens, 2, HOJE)), [0, 1])
+        # no dia seguinte a fila anda
+        self.assertEqual(self.ids(L.secoes_da_vez(itens, 2, HOJE + timedelta(days=1))), [1, 2])
+
+    def test_so_avanca_o_que_foi_feito(self):
+        # estudou só a 2ª seção da vez: a 1ª continua na frente
+        itens = self.itens(0, 1, 0, 0, ultimo={1: HOJE - timedelta(days=1)})
+        self.assertEqual(self.ids(L.secoes_da_vez(itens, 2, HOJE)), [0, 2])
+
+    def test_sem_estudar_a_fila_espera(self):
+        itens = self.itens(0, 0, 0)
+        self.assertEqual(self.ids(L.secoes_da_vez(itens, 2, HOJE + timedelta(days=5))), [0, 1])
+
+    def test_folga(self):
+        self.assertEqual(L.folga_do_ciclo(6, 2), 2)
+        self.assertEqual(L.folga_do_ciclo(2, 2), 0)
+        self.assertEqual(L.folga_do_ciclo(0, 2), 0)
+
+    def test_folga_nao_conta_como_atraso(self):
+        d = HOJE - timedelta(days=6)              # 50% -> volta em 4 dias -> venceu há 2
+        self.assertEqual(L.analisar_assunto(1, [(d, 5, 10)], HOJE).atraso, 2)
+        self.assertEqual(L.analisar_assunto(1, [(d, 5, 10)], HOJE, folga=2).atraso, 0)
 
 
 class TestMapa(unittest.TestCase):
