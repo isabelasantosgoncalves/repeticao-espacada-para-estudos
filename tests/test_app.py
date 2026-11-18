@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from app import create_app
+import servicos as S  # "hoje" no fuso do app (o servidor pode estar em UTC)
 
 
 class TestApp(unittest.TestCase):
@@ -113,7 +114,7 @@ class TestApp(unittest.TestCase):
 
     def test_subassuntos(self):
         from datetime import date, timedelta
-        ONTEM = (date.today() - timedelta(days=1)).isoformat()
+        ONTEM = (S.hoje() - timedelta(days=1)).isoformat()
         self.criar_usuario("s@s.com")
         self.post("/materias/nova", {"nome": "SAT Math"}, "/materias")
         self.post("/assuntos/novo", {"nome": "Algebra", "materia_id": "1"}, "/materias")       # id 1
@@ -169,7 +170,7 @@ class TestApp(unittest.TestCase):
 
     def test_dias_de_estudo_da_secao(self):
         from datetime import date, timedelta
-        hoje = date.today()
+        hoje = S.hoje()
         self.criar_usuario("d@d.com")
         self.post("/configuracoes", {"ritmo": "leve", "aprendizado": "padrao", "teto_dias": "45",
                                      "modo": "completa", "revisao_minima": "2", "questoes_modo": "auto",
@@ -197,7 +198,7 @@ class TestApp(unittest.TestCase):
 
     def test_dia_vazio_adianta_e_mapa_sem_nao_estudados(self):
         from datetime import date, timedelta
-        hoje = date.today()
+        hoje = S.hoje()
         self.criar_usuario("v@z.com")
         cfg = {"ritmo": "leve", "aprendizado": "padrao", "teto_dias": "45", "modo": "completa",
                "revisao_minima": "2", "questoes_modo": "auto", "questoes_fixas": "10"}
