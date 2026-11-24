@@ -11,22 +11,17 @@
 {% if not tem_assuntos %}
 <div class="vazio painel">
   <h2>Comece pelas seções</h2>
-  <p>Cadastre suas seções (ex.: SAT Math) e os assuntos de cada uma. Depois é só voltar aqui.</p>
-  <a class="btn" href="{{ url_for('materias') }}">Cadastrar seções</a>
+  <p>Cadastre o que você estuda: a seção (ex.: ENEM), as matérias dela e os assuntos de cada matéria. Depois é só voltar aqui.</p>
+  <a class="btn" href="{{ url_for('materias') }}">Cadastrar</a>
 </div>
 {% else %}
 
 {# ---------------- números do dia ---------------- #}
-<div class="kpis">
+<div class="kpis" style="--n-kpis: {{ 3 + metas | length }}">
   <div class="kpi">
     <span>Revisões de hoje</span>
     <b>{{ feitas }}<small>/{{ revisao | length }}</small></b>
     <i class="kpi-barra"><i style="width: {{ ((feitas / revisao | length) * 100) | round if revisao else 0 }}%"></i></i>
-  </div>
-  <div class="kpi">
-    <span>Questões sugeridas</span>
-    <b>{{ total_questoes }}</b>
-    <small>{{ 'nas revisões de hoje' if revisao else 'nenhuma revisão hoje' }}</small>
   </div>
   <div class="kpi">
     <span>Atrasados</span>
@@ -40,6 +35,28 @@
     <small>dos assuntos já estudados</small>
     {% else %}<b>—</b><small>registre a primeira prática</small>{% endif %}
   </div>
+  {# Prova de cada seção com data (ex.: ENEM): contagem, progresso e ritmo de assuntos novos #}
+  {% for p in metas %}
+  <div class="kpi kpi-prova meta-{{ p.status }}">
+    <span>{{ p.nome }}</span>
+    <b>{% if p.faltam > 0 %}{{ '~' if p.aproximada }}<strong>{{ p.faltam }}</strong><small> dia{{ 's' if p.faltam > 1 }}</small>{% elif p.faltam == 0 %}é hoje{% else %}passou{% endif %}</b>
+    {% if p.total %}{% set comecados = p.total - p.nao_iniciados %}
+    <i class="kpi-barra"><i style="width: {{ (comecados / p.total * 100) | round }}%"></i></i>
+    <small>{{ comecados }} de {{ p.total }} assuntos começados · prova {{ p.meta_txt }}</small>
+    {% else %}<small>prova {{ p.meta_txt }}</small>{% endif %}
+    <small class="kpi-ritmo">
+      {% if p.status == 'passou' %}A prova passou: troque a data em <a href="{{ url_for('configuracoes') }}#prova">Configurações</a>.
+      {% elif p.status == 'concluido' %}Todo o conteúdo começado. Agora é revisar.
+      {% elif p.status == 'atrasado' %}<span class="txt-vermelho">Prazo do conteúdo novo passou: falta{{ 'm' if p.nao_iniciados > 1 }} {{ p.nao_iniciados }}.</span>
+      {% else %}<b>{{ p.por_semana }} novo{{ 's' if p.por_semana > 1 }}/semana</b> até {{ p.fim_conteudo.strftime('%d/%m') }} ·
+        <span class="{{ 'txt-amarelo' if p.status == 'abaixo' else 'txt-verde' }}">últimos 7 dias: {{ p.iniciados_semana }}</span>
+      {% endif %}
+    </small>
+    {% if p.reta_final and p.status != 'passou' and cfg.ritmo != 'intenso' %}
+    <small class="kpi-ritmo txt-amarelo">Reta final: se der, ritmo Intenso.</small>
+    {% endif %}
+  </div>
+  {% endfor %}
 </div>
 
 <div class="painel-grade">
@@ -51,14 +68,14 @@
         <p class="sub">
           {% if tipo == 'grande' %}Revisão grande
           {% elif tipo == 'completa' %}Tudo que venceu
-          {% elif tipo == 'diaria' %}O que venceu · até {{ cfg.revisao_minima }} por seção
+          {% elif tipo == 'diaria' %}O que venceu · até {{ cfg.revisao_minima }} por matéria
           {% else %}Hoje não tem revisão{% if proximo_fixo %} · próxima em {{ proximo_fixo | br }}{% endif %}
           {% endif %}
           {% if pausadas %}· fora hoje: {{ pausadas | join(', ') }}{% endif %}
         </p>
         {% if vez %}
         <div class="vez-hoje">
-          <span class="vez-rotulo">Seções de hoje</span>
+          <span class="vez-rotulo">Matérias de hoje</span>
           {% for it in vez %}
           <span class="vez-chip {{ 'feito' if it.feito }}">
             {{ it.nome }}{% if it.feito %} ✓{% else %}
@@ -80,7 +97,7 @@
       {% for item in revisao %}{% set e = item.estado %}{% set a = item.assunto %}
       <li class="rev-item {{ 'feito' if item.feito }}">
         <div class="rev-info">
-          <a class="rev-nome" href="{{ url_for('historico', aid=a.id) }}">{{ a.nome }}</a>
+          <a class="rev-nome" href="{{ url_for('historico', aid=a.id) }}">{{ a.nome }}</a>{% if item.extra %} <span class="tag tag-leve" title="Puxada para hoje">a mais</span>{% endif %}
           <small>{{ a.materia }}{% if a.pai %} · {{ a.pai }}{% endif %}
             {% if e.atraso %} · <span class="txt-vermelho">{{ e.atraso }} dia{{ 's' if e.atraso > 1 }} de atraso</span>{% endif %}</small>
           <span class="barra"><i class="{{ e.dominio_efetivo | cor }}" style="width: {{ (e.dominio_efetivo * 100) | round }}%"></i></span>
@@ -109,6 +126,17 @@
     <p class="nada">Nada venceu hoje.</p>
     {% endif %}
 
+    {% if n_restantes %}
+    <div class="mais-hoje">
+      <p>Fic{{ 'aram' if n_restantes > 1 else 'ou' }} <b>{{ n_restantes }} revis{{ 'ões' if n_restantes > 1 else 'ão' }} atrasada{{ 's' if n_restantes > 1 }}</b> fora da lista. Tem tempo hoje? Faça mais:</p>
+      <form method="post" action="{{ url_for('fazer_mais_hoje') }}" class="mais-botoes">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% for q in (2, 5) if q < n_restantes %}<button class="btn btn-sec" name="quantos" value="{{ q }}">+{{ q }}</button>{% endfor %}
+        <button class="btn btn-sec" name="quantos" value="todas">{{ 'Todas' if n_restantes > 1 else '+1' }}{% if n_restantes > 1 %} ({{ n_restantes }}){% endif %}</button>
+      </form>
+    </div>
+    {% endif %}
+
     <p class="rev-outra">Fez outro assunto? <a href="{{ url_for('nova_sessao') }}">Registrar outra prática</a></p>
 
     {% if extras %}
@@ -126,6 +154,27 @@
 
   {# ---------------- coluna lateral ---------------- #}
   <aside class="lateral">
+    {# Flashcards para hoje #}
+    {% if flashcards %}
+    <section class="bloco fc-hoje">
+      <div class="amanha-cab">
+        <h2 class="lat-tit"><a class="lat-link" href="{{ url_for('flashcards') }}">Flashcards</a></h2>
+        {% if flashcards.total %}<span class="fc-n">{{ flashcards.total }}</span>{% endif %}
+      </div>
+      {% if flashcards.total %}
+      <p class="amanha-tipo">{{ flashcards.total }} para estudar hoje{% if flashcards.novos %} · {{ flashcards.novos }} novo{{ 's' if flashcards.novos > 1 }}{% endif %}</p>
+      <ul class="amanha-lista">
+        {% for s in flashcards.materias %}
+        <li><a class="fc-sec" href="{{ url_for('estudar', materia=s.id) }}"><span>{{ s.nome }}</span><small>{{ s.n }}</small></a></li>
+        {% endfor %}
+      </ul>
+      <a class="btn btn-p fc-btn" href="{{ url_for('estudar') }}">Estudar todos</a>
+      {% else %}
+      <p class="mini">Nenhum cartão para hoje.</p>
+      {% endif %}
+    </section>
+    {% endif %}
+
     {# Prévia de amanhã: mesmas regras de hoje, já contando o que foi feito hoje #}
     <section class="bloco amanha">
       <div class="amanha-cab">
@@ -135,7 +184,7 @@
       <p class="amanha-tipo">
         {% if amanha.tipo == 'grande' %}Revisão grande (dia fixo)
         {% elif amanha.tipo == 'completa' %}Tudo que vencer
-        {% elif amanha.tipo == 'diaria' %}O que vencer · até {{ cfg.revisao_minima }} por seção
+        {% elif amanha.tipo == 'diaria' %}O que vencer · até {{ cfg.revisao_minima }} por matéria
         {% else %}Sem revisão{% endif %}
         {% if amanha.itens %} · {{ amanha.itens | length }} assunto{{ 's' if amanha.itens | length > 1 }} · {{ amanha.questoes }} questões{% endif %}
       </p>
@@ -153,7 +202,7 @@
       {% else %}
       <p class="mini">Nada para revisar amanhã.</p>
       {% endif %}
-      {% if amanha.vez %}<p class="mini">Seções: {{ amanha.vez | map(attribute='nome') | join(', ') }}</p>{% endif %}
+      {% if amanha.vez %}<p class="mini">Matérias: {{ amanha.vez | map(attribute='nome') | join(', ') }}</p>{% endif %}
       {% if amanha.pausadas %}<p class="mini">Amanhã não é dia de: {{ amanha.pausadas | join(', ') }}.</p>{% endif %}
     </section>
 

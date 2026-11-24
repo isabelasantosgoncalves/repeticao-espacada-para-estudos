@@ -9,7 +9,7 @@
   <p class="sub">Dá para mudar tudo depois em Configurações.</p>
 
   <ol class="progresso" aria-hidden="true">
-    <li class="on"></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li>
+    <li class="on"></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li><li></li>
   </ol>
 
   <form method="post" id="onboarding" class="form">
@@ -26,39 +26,48 @@
       {{ campos.aprendizado(cfg) }}
     </section>
 
+    <section class="passo" data-passo="prova" hidden>
+      <h2><span class="num">3</span> Você estuda para uma prova com data?</h2>
+      <p class="sub">Ex.: ENEM. Se não souber o dia, coloque só o mês. Nenhuma revisão passa da prova.
+        Depois é só colocar as matérias da prova dentro dela, na tela Seções.</p>
+      {{ campos.meta('meta', None, 'Não tenho prova marcada') }}
+      <label class="prova-nome" data-prova-nome>Nome da prova
+        <input type="text" name="prova_nome" maxlength="120" placeholder="Ex.: ENEM, SAT, vestibular"></label>
+    </section>
+
     <section class="passo" data-passo="teto" hidden>
-      <h2><span class="num">3</span> Máximo de dias que um assunto pode ficar sem revisão</h2>
+      <h2><span class="num">4</span> Máximo de dias que um assunto pode ficar sem revisão</h2>
       {{ campos.teto(cfg) }}
     </section>
 
     <section class="passo" data-passo="distribuicao" hidden>
-      <h2><span class="num">4</span> Como você distribui suas seções na semana?</h2>
-      <p class="sub">Seção é o que você estuda junto, como "SAT Math" ou "Biologia".</p>
+      <h2><span class="num">5</span> Como você distribui suas matérias na semana?</h2>
+      <p class="sub">Matéria é o que você estuda junto, como "SAT Math" ou "Biologia".</p>
       {{ campos.distribuicao(cfg) }}
     </section>
 
     <section class="passo" data-passo="secoes_dia" hidden>
-      <h2><span class="num">5</span> Quantas seções do ciclo você estuda por dia?</h2>
+      <h2><span class="num">6</span> Quantas matérias do ciclo você estuda por dia?</h2>
       {{ campos.secoes_por_dia(cfg) }}
     </section>
 
     <section class="passo" data-passo="modo" hidden>
-      <h2><span class="num">6</span> Quando você revisa?</h2>
+      <h2><span class="num">7</span> Quando você revisa?</h2>
       {{ campos.modo(cfg) }}
     </section>
 
     <section class="passo" data-passo="dias" hidden>
-      <h2><span class="num">7</span> Dia fixo da revisão grande</h2>
+      <h2><span class="num">8</span> Dia fixo da revisão grande</h2>
       {{ campos.dias(cfg) }}
     </section>
 
     <section class="passo" data-passo="minima" hidden>
-      <h2><span class="num">8</span> Quantos assuntos revisar por seção, por dia?</h2>
+      <h2><span class="num">9</span> Quantos assuntos revisar por matéria, por dia?</h2>
       {{ campos.minima(cfg) }}
     </section>
 
     <section class="passo" data-passo="questoes" hidden>
-      <h2><span class="num">9</span> Questões por assunto</h2>
+      <h2><span class="num">10</span> Questões por assunto</h2>
       {{ campos.questoes(cfg) }}
     </section>
 
@@ -70,4 +79,4 @@
   </form>
 </div>
 {% endblock %}
-{% block scripts %}<script>Revisa.onboarding(document.getElementById('onboarding')); Revisa.teto(document.getElementById('onboarding'), true); Revisa.sequencias(document.getElementById('onboarding'));</script>{% endblock %}
+{% block scripts %}<script>Revisa.onboarding(document.getElementById('onboarding')); Revisa.teto(document.getElementById('onboarding'), true); Revisa.sequencias(document.getElementById('onboarding')); Revisa.metas(document.getElementById('onboarding'));</script>{% endblock %}

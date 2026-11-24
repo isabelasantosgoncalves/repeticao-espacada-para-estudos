@@ -1,0 +1,27 @@
+{# Campos de um cartão (criar e editar): frente e verso com texto, imagem e fórmula. #}
+{% macro imagem(c, campo, rotulo) %}
+<div class="fc-img-campo">
+  {% if c and c[campo] %}
+  <img class="fc-img-mini" src="{{ url_for('imagem_cartao', iid=c[campo]) }}" alt="">
+  <label class="check"><input type="checkbox" name="remover_{{ campo }}" value="1"> Remover a imagem</label>
+  {% endif %}
+  <label class="fc-arquivo">{{ rotulo }}
+    <input type="file" name="{{ campo }}" accept="image/png,image/jpeg,image/gif,image/webp" data-imagem>
+  </label>
+</div>
+{% endmacro %}
+
+{% macro campos(c=None) %}
+<label>Frente <small class="mini">a pergunta</small>
+  <textarea name="frente" rows="3" maxlength="2000" data-colar="imagem_frente" {{ 'autofocus' if not c }}
+            placeholder="Ex.: Fórmula de Bhaskara">{{ c.frente if c else '' }}</textarea></label>
+{{ imagem(c, 'imagem_frente', 'Imagem na frente') }}
+<label>Verso <small class="mini">a resposta</small>
+  <textarea name="verso" rows="3" maxlength="2000" data-colar="imagem_verso"
+            placeholder="Ex.: $$x = \frac{-b \pm \sqrt{\Delta}}{2a}$$">{{ c.verso if c else '' }}</textarea></label>
+{{ imagem(c, 'imagem_verso', 'Imagem no verso') }}
+<input type="hidden" name="tem_invertido" value="1">
+<label class="check"><input type="checkbox" name="invertido" value="1" {{ 'checked' if c and c.invertido }}>
+  Também perguntar ao contrário (verso → frente)</label>
+<p class="mini fc-dica">Imagem: escolha o arquivo ou cole (Ctrl+V) no texto. Fórmula: escreva entre <code>$$</code>, ex.: <code>$$\frac{a}{b}$$</code>.</p>
+{% endmacro %}

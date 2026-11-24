@@ -25,7 +25,7 @@
   <label class="opcao">
     <input type="radio" name="aprendizado" value="{{ valor }}" {{ 'checked' if cfg.aprendizado == valor }} required>
     <span><b>{{ titulo }}</b><small>{{ desc }}</small>
-      <small class="opcao-meta">Acertando tudo: <span data-seq="{{ seq | join(',') }}">{{ seq | join(' → ') }}</span> dias</small></span>
+      <small class="opcao-meta">Acertando tudo (com as questões sugeridas): <span data-seq="{{ seq | join(',') }}">{{ seq | join(' → ') }}</span> dias</small></span>
   </label>
   {% endfor %}
 </div>
@@ -52,9 +52,9 @@
 {% macro distribuicao(cfg) %}
 <div class="opcoes">
   {% for valor, titulo, desc in [
-      ('todas', 'Estudo todas as seções todo dia', 'Ex.: SAT Math e SAT English, todos os dias.'),
-      ('dias', 'Cada seção tem seus dias', 'Ex.: ENEM, com Biologia seg/qua e Química ter/qui. Você marca os dias de cada seção na tela Seções.'),
-      ('ciclo', 'Ciclo de estudos', 'Uma fila de seções que se repete. Cada dia você estuda as próximas da fila; se não estudar num dia, a fila espera. Você monta a fila na tela Seções.')] %}
+      ('todas', 'Estudo todas as matérias todo dia', 'Ex.: SAT Math e SAT English, todos os dias.'),
+      ('dias', 'Cada matéria tem seus dias', 'Ex.: ENEM, com Biologia seg/qua e Química ter/qui. Você marca os dias de cada matéria na tela Seções.'),
+      ('ciclo', 'Ciclo de estudos', 'Uma fila de matérias que se repete. Cada dia você estuda as próximas da fila; se não estudar num dia, a fila espera. Você monta a fila na tela Seções.')] %}
   <label class="opcao">
     <input type="radio" name="distribuicao" value="{{ valor }}" {{ 'checked' if cfg.distribuicao == valor }} required>
     <span><b>{{ titulo }}</b><small>{{ desc }}</small></span>
@@ -66,17 +66,17 @@
 {% macro secoes_por_dia(cfg) %}
 <label class="campo-num">
   <input type="number" name="secoes_por_dia" min="1" max="10" value="{{ cfg.secoes_por_dia }}" required>
-  <span>seções por dia</span>
+  <span>matérias por dia</span>
 </label>
 {% endmacro %}
 
 {% macro modo(cfg) %}
 <div class="opcoes" data-grupo="modo">
   {% for valor, titulo, desc in [
-      ('diaria', 'Todo dia, o que vencer (com limite)', 'Revisa os assuntos que venceram, até o limite por seção. O que passar fica para os dias seguintes.'),
+      ('diaria', 'Todo dia, o que vencer (com limite)', 'Revisa os assuntos que venceram, até o limite por matéria. O que passar fica para os dias seguintes.'),
       ('completa', 'Todo dia, tudo que vencer', 'Sem limite. Bom para a fase só de questões.'),
       ('fixa', 'Só no dia fixo', 'Uma revisão grande por semana, com tudo que venceu.'),
-      ('ambos', 'Dia fixo + limite nos outros dias', 'Revisão grande no dia fixo; nos outros dias, o que vencer até o limite por seção.')] %}
+      ('ambos', 'Dia fixo + limite nos outros dias', 'Revisão grande no dia fixo; nos outros dias, o que vencer até o limite por matéria.')] %}
   <label class="opcao">
     <input type="radio" name="modo" value="{{ valor }}" {{ 'checked' if cfg.modo == valor }} required>
     <span><b>{{ titulo }}</b><small>{{ desc }}</small></span>
@@ -99,7 +99,7 @@
 {% macro minima(cfg) %}
 <label class="campo-num">
   <input type="number" name="revisao_minima" min="1" max="50" value="{{ cfg.revisao_minima }}" required>
-  <span>assuntos por seção, por dia</span>
+  <span>assuntos por matéria, por dia</span>
 </label>
 {% endmacro %}
 
@@ -114,5 +114,26 @@
     <span><b>Número fixo</b><small>Sempre
       <input type="number" name="questoes_fixas" min="1" max="500" value="{{ cfg.questoes_fixas }}" class="num-inline"> questões por assunto.</small></span>
   </label>
+</div>
+{% endmacro %}
+
+{# Data da prova de uma seção. `valor`: None, AAAA-MM ou AAAA-MM-DD.
+   Opções: Sem prova / Sei só o mês / Sei o dia. #}
+{% macro meta(prefixo, valor, rotulo_sem='Sem prova') %}
+{% if valor and valor | length == 7 %}{% set tipo = 'mes' %}
+{% elif valor and valor | length == 10 %}{% set tipo = 'dia' %}
+{% else %}{% set tipo = 'sem' %}{% endif %}
+<div class="meta-campo" data-meta>
+  <div class="meta-tipos" role="radiogroup">
+    <label class="meta-tipo"><input type="radio" name="{{ prefixo }}_tipo" value="sem" {{ 'checked' if tipo == 'sem' }}><span>{{ rotulo_sem }}</span></label>
+    <label class="meta-tipo"><input type="radio" name="{{ prefixo }}_tipo" value="mes" {{ 'checked' if tipo == 'mes' }}><span>Sei só o mês</span></label>
+    <label class="meta-tipo"><input type="radio" name="{{ prefixo }}_tipo" value="dia" {{ 'checked' if tipo == 'dia' }}><span>Sei o dia</span></label>
+  </div>
+  <div class="meta-datas">
+    <label data-meta-se="mes">Mês da prova
+      <input type="month" name="{{ prefixo }}_mes" value="{{ valor if tipo == 'mes' else '' }}" placeholder="AAAA-MM"></label>
+    <label data-meta-se="dia">Dia da prova
+      <input type="date" name="{{ prefixo }}_dia" value="{{ valor if tipo == 'dia' else '' }}"></label>
+  </div>
 </div>
 {% endmacro %}

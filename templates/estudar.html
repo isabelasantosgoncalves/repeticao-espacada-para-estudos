@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% import "_cartao_campos.html" as cc %}
+{% block titulo %}Estudar · {{ titulo }}{% endblock %}
+{% block main_class %}conteudo medio{% endblock %}
+{% block head %}{% include "_katex.html" %}{% endblock %}
+
+{% macro escopo() %}{% if bid %}<input type="hidden" name="baralho" value="{{ bid }}">{% endif %}{% if mid %}<input type="hidden" name="materia" value="{{ mid }}">{% endif %}{% endmacro %}
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+{% macro img(iid) %}{% if iid %}<img class="fc-img" src="{{ url_for('imagem_cartao', iid=iid) }}" alt="">{% endif %}{% endmacro %}
+
+{% block conteudo %}
+<div class="cab-pagina">
+  <div>
+    <p class="selo"><a href="{{ url_for('flashcards') }}">Flashcards</a> · estudando</p>
+    <h1>{{ titulo }}</h1>
+  </div>
+  {# como no Anki: novos (azul) · aprendendo (vermelho) · para revisar (verde); o tipo do cartão atual fica sublinhado #}
+  <p class="fc-contadores" title="Novos · Aprendendo · Para revisar">
+    <span class="cont-novo {{ 'atual' if cartao and not cartao.proxima and not cartao.aprendendo }}" title="Novos">{{ fila.n_novos }}</span>
+    <span class="cont-aprendendo {{ 'atual' if cartao and cartao.aprendendo }}" title="Aprendendo (errou hoje)">{{ fila.n_aprendendo }}</span>
+    <span class="cont-revisar {{ 'atual' if cartao and cartao.proxima and not cartao.aprendendo }}" title="Para revisar">{{ fila.n_revisar }}</span>
+  </p>
+</div>
+
+{% if cartao %}
+<div class="fc-estudo" data-estudo>
+  <article class="fc-cartao">
+    <small class="fc-origem">{{ cartao.materia }} · {{ cartao.baralho }}{% if cartao.lado %} · <span class="tag tag-leve">invertido</span>{% endif %}</small>
+    <div class="fc-lado">
+      {% if cartao.pergunta %}<div class="fc-frente fc-texto">{{ cartao.pergunta }}</div>{% endif %}
+      {{ img(cartao.img_pergunta) }}
+    </div>
+    <div class="fc-verso" data-verso hidden>
+      {% if cartao.resposta %}<div class="fc-texto">{{ cartao.resposta }}</div>{% endif %}
+      {{ img(cartao.img_resposta) }}
+    </div>
+  </article>
+
+  <button class="btn fc-virar" type="button" data-virar>Mostrar resposta <kbd>espaço</kbd></button>
+
+  <form method="post" action="{{ url_for('responder_cartao') }}" class="fc-notas" data-notas hidden>
+    {{ csrf() }}{{ escopo() }}
+    <input type="hidden" name="cartao_id" value="{{ cartao.id }}">
+    <input type="hidden" name="lado" value="{{ cartao.lado }}">
+    {% for nota, rotulo in [('errei', 'Errei'), ('demorei', 'Acertei, mas demorei'), ('acertei', 'Acertei')] %}
+    <button class="fc-nota fc-{{ nota }}" name="nota" value="{{ nota }}"><b>{{ rotulo }}</b><kbd>{{ loop.index }}</kbd></button>
+    {% endfor %}
+  </form>
+
+  {# ferramentas do Anki: desfazer, editar, adiar (enterrar) e suspender #}
+  <div class="fc-ferramentas">
+    {% if feitos %}
+    <form method="post" action="{{ url_for('desfazer_resposta') }}" data-desfazer>{{ csrf() }}{{ escopo() }}
+      <button class="fc-ferr" title="Desfazer a última resposta (Ctrl+Z)">↶ Desfazer</button></form>
+    {% endif %}
+    <details class="fc-ed-estudo">
+      <summary class="fc-ferr">Editar cartão</summary>
+      <form method="post" action="{{ url_for('editar_cartao', cid=cartao.id) }}" class="form" enctype="multipart/form-data">
+        {{ csrf() }}{{ escopo() }}<input type="hidden" name="voltar" value="estudo">
+        {{ cc.campos(cartao) }}
+        <button class="btn btn-p">Salvar e continuar</button>
+      </form>
+    </details>
+    <form method="post" action="{{ url_for('adiar_cartao', cid=cartao.id) }}">{{ csrf() }}{{ escopo() }}
+      <input type="hidden" name="voltar" value="estudo"><button class="fc-ferr" title="Tira o cartão de hoje; amanhã ele volta">Adiar para amanhã</button></form>
+    <form method="post" action="{{ url_for('suspender_cartao', cid=cartao.id) }}">{{ csrf() }}{{ escopo() }}
+      <input type="hidden" name="voltar" value="estudo"><button class="fc-ferr" title="Tira o cartão do estudo até você reativar no baralho">Suspender</button></form>
+  </div>
+</div>
+{% else %}
+<div class="painel vazio">
+  <h2>Tudo em dia</h2>
+  <p class="sub">Nenhum cartão para estudar agora{% if feitos %}: {{ feitos }} resposta{{ 's' if feitos > 1 }} hoje{% endif %}.</p>
+  <a class="btn" href="{{ url_for('hoje') }}">Voltar para Hoje</a>
+  <a class="btn btn-sec" href="{{ url_for('flashcards') }}">Ver baralhos</a>
+  {% if feitos %}
+  <form method="post" action="{{ url_for('desfazer_resposta') }}" class="fc-desfazer-fim" data-desfazer>{{ csrf() }}{{ escopo() }}
+    <button class="fc-ferr">↶ Desfazer a última resposta</button></form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script>Revisa.estudo(document.querySelector('[data-estudo]'));</script>{% endblock %}

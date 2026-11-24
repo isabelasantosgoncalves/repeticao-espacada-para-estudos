@@ -118,7 +118,8 @@ class TestSessoesPequenas(unittest.TestCase):
         pcts, totais = [0.9, 0.9, 0.5], [20, 20, 2]
         # pesos: 0,5·0,2 = 0,1 | 0,3 | 0,2  -> (0,05 + 0,27 + 0,18) / 0,6 = 83,3%
         self.assertAlmostEqual(L.dominio(pcts, totais), 0.5 / 0.6)
-        self.assertEqual(ci(pcts, totais), (7, 0))
+        # a tabela pediria 7 dias, mas 2 de 6 questões sugeridas andam só 1/3: 30 -> 22
+        self.assertEqual(ci(pcts, totais), (22, 0))
 
     def test_sessao_grande_ruim_mexe_mais(self):
         pcts, totais = [0.9, 0.9, 0.5], [20, 20, 20]
@@ -136,13 +137,13 @@ class TestSessoesPequenas(unittest.TestCase):
         self.assertGreater(d2, d3)
         self.assertAlmostEqual(d3, 0.5)   # só sessões pequenas na janela: pesam igual
         intervalos = [ci(base + [0.5] * k, tb + [2] * k)[0] for k in (1, 2, 3)]
-        self.assertEqual(intervalos, [7, 7, 4])
+        self.assertEqual(intervalos, [22, 19, 16])   # desce aos poucos
 
     def test_estado_usa_totais(self):
         d0 = HOJE - timedelta(days=40)
         sessoes = [(d0, 18, 20), (d0 + timedelta(days=15), 18, 20), (HOJE - timedelta(days=1), 1, 2)]
         e = L.analisar_assunto(1, sessoes, HOJE)
-        self.assertEqual(e.intervalo, 7)
+        self.assertEqual(e.intervalo, 12)         # 15 -> anda 1/3 do caminho até 7 (2 de 6 sugeridas)
         self.assertEqual(e.questoes, 10)
         self.assertAlmostEqual(e.ultimo_pct, 0.5)
 
@@ -290,10 +291,10 @@ class TestSelecaoGrande(unittest.TestCase):
 
 class TestFaseDeAprendizado(unittest.TestCase):
     def test_assunto_novo_nao_vai_direto_para_30_dias(self):
-        self.assertEqual(L.calcular_intervalo([1.0], [5])[0], 7)
-        self.assertEqual(L.calcular_intervalo([1.0, 1.0], [5, 5])[0], 15)
-        self.assertEqual(L.calcular_intervalo([1.0, 1.0, 1.0], [5, 5, 5])[0], 30)
-        self.assertEqual(L.calcular_intervalo([1.0] * 4, [5] * 4)[0], 60)
+        self.assertEqual(L.calcular_intervalo([1.0], [10])[0], 7)
+        self.assertEqual(L.calcular_intervalo([1.0, 1.0], [10, 5])[0], 15)
+        self.assertEqual(L.calcular_intervalo([1.0, 1.0, 1.0], [10, 5, 5])[0], 30)
+        self.assertEqual(L.calcular_intervalo([1.0] * 4, [10] + [5] * 3)[0], 60)
 
     def test_volta_antes_se_nao_foi_bem(self):
         # Equilíbrio (7, 15): bom 7, médio 4 (metade, para cima), mal 1
@@ -378,7 +379,7 @@ class TestRitmo(unittest.TestCase):
 
     def test_estado_usa_fator(self):
         d = HOJE - timedelta(days=1)
-        e = L.analisar_assunto(1, [(d, 5, 5)], HOJE, fator=0.5)
+        e = L.analisar_assunto(1, [(d, 10, 10)], HOJE, fator=0.5)
         self.assertEqual(e.intervalo, 3)          # teto 7 x 0,5 = 3,5 -> 3
 
 
@@ -469,6 +470,122 @@ class TestMapa(unittest.TestCase):
         futuro = HOJE + timedelta(days=3)
         self.assertEqual(L.classificar_para_mapa(estado(1, 0.9, 0.1, futuro), HOJE), "dominado")
         self.assertEqual(L.classificar_para_mapa(estado(1, 0.6, 0.4, futuro), HOJE), "esperar")
+
+
+class TestMeta(unittest.TestCase):
+    def test_limite_metade_dos_dias(self):
+        self.assertEqual(L.limite_pela_meta(HOJE, HOJE + timedelta(days=60)), 30)
+        self.assertEqual(L.limite_pela_meta(HOJE, HOJE + timedelta(days=14)), 7)
+        self.assertEqual(L.limite_pela_meta(HOJE, HOJE + timedelta(days=1)), 1)
+        self.assertIsNone(L.limite_pela_meta(HOJE, HOJE))          # prova hoje/passada: sem limite
+        self.assertIsNone(L.limite_pela_meta(HOJE, None))
+
+    def test_revisao_nunca_passa_da_prova(self):
+        # 100% com teto livre iria para 7 dias (fase padrão); a 6 dias da prova volta em 3
+        sess = [(HOJE, 10, 10)]
+        sem = L.analisar_assunto(1, sess, HOJE)
+        com = L.analisar_assunto(1, sess, HOJE, meta=HOJE + timedelta(days=6))
+        self.assertEqual(sem.intervalo, 7)
+        self.assertEqual(com.intervalo, 3)
+        self.assertLess(com.proxima_revisao, HOJE + timedelta(days=6))
+        # prova longe: não muda nada
+        longe = L.analisar_assunto(1, sess, HOJE, meta=HOJE + timedelta(days=300))
+        self.assertEqual(longe.intervalo, 7)
+
+    def test_plano_ritmo_de_assuntos_novos(self):
+        meta = HOJE + timedelta(days=100)        # margem = 20 dias -> conteúdo até o dia 80
+        p = L.plano_da_meta(HOJE, meta, 20, 0)
+        self.assertEqual(p["fim_conteudo"], HOJE + timedelta(days=80))
+        self.assertEqual(p["por_semana"], 2)     # 20 assuntos em 80 dias = 1,75 -> 2
+        self.assertEqual(p["status"], "abaixo")
+        self.assertEqual(L.plano_da_meta(HOJE, meta, 20, 2)["status"], "em_dia")
+        self.assertEqual(L.plano_da_meta(HOJE, meta, 0, 0)["status"], "concluido")
+        self.assertFalse(p["reta_final"])
+
+    def test_plano_margem_limitada(self):
+        # prova em 1 ano: margem de no máximo 60 dias; prova em 10 dias: no mínimo 7
+        self.assertEqual(L.margem_de_revisao(365), 60)
+        self.assertEqual(L.margem_de_revisao(10), 7)
+
+    def test_plano_atrasado_reta_final_e_passou(self):
+        p = L.plano_da_meta(HOJE, HOJE + timedelta(days=5), 3, 0)
+        self.assertEqual(p["status"], "atrasado")
+        self.assertTrue(p["reta_final"])
+        self.assertEqual(L.plano_da_meta(HOJE, HOJE - timedelta(days=1), 3, 0)["status"], "passou")
+
+
+class TestFlashcards(unittest.TestCase):
+    """Cartões seguem a mesma lógica dos assuntos (errei 0%, demorei 75%, acertei 100%)."""
+
+    def agenda(self, *notas, **kw):
+        respostas = [(HOJE + timedelta(days=i), n) for i, n in enumerate(notas)]
+        return L.agenda_cartao(respostas, **kw)
+
+    def test_cartao_novo(self):
+        self.assertIsNone(L.agenda_cartao([]))
+
+    def test_fase_de_aprendizado(self):
+        # fase padrão: acertou -> 7 dias; depois 15
+        self.assertEqual(self.agenda("acertei")[1], 7)
+        self.assertEqual(self.agenda("acertei", "acertei")[1], 15)
+        # demorei = resultado médio -> metade do degrau; errei -> 1 dia
+        self.assertEqual(self.agenda("demorei")[1], 4)
+        self.assertEqual(self.agenda("errei")[1], 1)
+
+    def test_depois_da_fase_usa_a_tabela(self):
+        # 7 -> 15 -> 30 (dobra) -> 60
+        self.assertEqual(self.agenda("acertei", "acertei", "acertei")[1], 30)
+        self.assertEqual(self.agenda("acertei", "acertei", "acertei", "acertei")[1], 60)
+        # errou depois de saber: o domínio cai e volta mais cedo
+        self.assertLess(self.agenda("acertei", "acertei", "acertei", "errei")[1], 15)
+
+    def test_so_a_primeira_resposta_do_dia_conta(self):
+        # errou e depois acertou no mesmo dia (reaprendizado): vale o "errei" -> 1 dia
+        mesmo_dia = [(HOJE, "errei"), (HOJE, "acertei")]
+        self.assertEqual(L.agenda_cartao(mesmo_dia)[1], 1)
+        self.assertEqual(L.agenda_cartao([(HOJE, "errei")])[1], 1)
+
+    def test_ritmo_teto_e_prova(self):
+        self.assertEqual(self.agenda("acertei", fator=0.5)[1], 3)          # 7 x 0,5 = 3,5 -> 3 (meio para baixo)
+        self.assertEqual(self.agenda("acertei", "acertei", "acertei", "acertei", teto=45)[1], 45)
+        ultima = HOJE + timedelta(days=2)
+        proxima, dias = self.agenda("acertei", "acertei", "acertei", meta=ultima + timedelta(days=10))
+        self.assertEqual(dias, 5)
+        self.assertEqual(proxima, ultima + timedelta(days=5))
+
+
+class TestMesmoDia(unittest.TestCase):
+    def test_praticas_do_mesmo_dia_somam(self):
+        self.assertEqual(L.juntar_por_dia([(HOJE, 5, 5), (HOJE, 3, 5), (HOJE - timedelta(days=3), 2, 4)]),
+                         [(HOJE - timedelta(days=3), 2, 4), (HOJE, 8, 10)])
+
+    def test_conta_como_uma_pratica_so(self):
+        separado = L.analisar_assunto(1, [(HOJE, 5, 5), (HOJE, 3, 5)], HOJE)
+        junto = L.analisar_assunto(1, [(HOJE, 8, 10)], HOJE)
+        self.assertEqual(separado.n_sessoes, 1)
+        self.assertEqual((separado.dominio, separado.intervalo), (junto.dominio, junto.intervalo))
+
+
+class TestPassoPeloTamanho(unittest.TestCase):
+    """O intervalo anda na proporção das questões feitas em relação às sugeridas."""
+
+    def seq(self, total, fixas=None, n=6):
+        f = L.tetos_da_fase("degraus")
+        return [L.calcular_intervalo([1.0] * k, [total] * k, fixas, tetos=f, teto=30)[0] for k in range(1, n + 1)]
+
+    def test_questoes_sugeridas_andam_o_passo_inteiro(self):
+        self.assertEqual(self.seq(10), [3, 7, 15, 30, 30, 30])
+        self.assertEqual(self.seq(5, fixas=5), [3, 7, 15, 30, 30, 30])   # escolheu 5 fixas: 5 é o passo inteiro
+
+    def test_menos_questoes_andam_menos(self):
+        self.assertEqual(self.seq(5)[0], 2)                  # assunto novo pede 10: 5 anda metade (1 -> 3)
+        self.assertEqual(self.seq(2, fixas=5), [2, 4, 8, 17, 24, 30])
+
+    def test_peso_do_passo(self):
+        self.assertEqual(L.peso_do_passo(5, 10), 0.5)
+        self.assertEqual(L.peso_do_passo(5, 4), 1.0)
+        self.assertEqual(L.peso_do_passo(5, 20), 0.5)         # referência máxima: 10
+        self.assertEqual(L.peso_do_passo(None, 10), 1.0)
 
 
 if __name__ == "__main__":

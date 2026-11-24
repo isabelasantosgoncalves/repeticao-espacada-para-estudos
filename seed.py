@@ -51,6 +51,41 @@ CURRICULO = {
     ],
 }
 
+# Seção de exemplo: todas as matérias do currículo, com prova só com o mês.
+SECAO = ("ENEM", "{ano}-11")
+
+# Flashcards de exemplo: matéria -> baralho -> [(frente, verso, [(dias atrás, resposta), ...])]
+# Sem respostas = cartão novo. Com a fase padrão (7 e 15 dias), alguns vencem hoje.
+BARALHOS = {
+    "Matemática": {
+        "Fórmulas": [
+            ("Fórmula de Bhaskara", r"$$x = \frac{-b \pm \sqrt{\Delta}}{2a}$$", [(7, "acertei")]),
+            ("Discriminante (Δ)", r"$$\Delta = b^2 - 4ac$$", [(22, "acertei"), (15, "acertei")]),
+            ("Área do círculo", r"$$A = \pi r^2$$", [(3, "acertei")]),
+            ("Volume do cilindro", "V = πr²h", [(1, "errei")]),
+            ("Soma dos ângulos internos de um polígono", "S = (n − 2) · 180°", []),
+            ("Termo geral da PA", "aₙ = a₁ + (n − 1) · r", []),
+        ],
+    },
+    "Português": {
+        "Crase": [
+            ("Crase antes de palavra masculina?", "Não. Ex.: andar a pé, a cavalo.", [(2, "demorei")]),
+            ("Crase em “à moda de”", "Sim, mesmo com a palavra omitida: bife à milanesa.", [(7, "acertei")]),
+            ("Crase antes de verbo?", "Nunca. Ex.: começou a estudar.", []),
+        ],
+    },
+    "Biologia": {
+        "Organelas": [
+            ("Mitocôndria", "Respiração celular: produz ATP.", [(20, "acertei"), (13, "errei"), (12, "acertei")]),
+            ("Ribossomo", "Síntese de proteínas.", [(4, "acertei")]),
+            ("Complexo golgiense", "Modifica, armazena e exporta substâncias (secreção).", []),
+        ],
+    },
+}
+
+# Cartões que também perguntam ao contrário (verso -> frente)
+INVERTIDOS = {"Mitocôndria", "Ribossomo"}
+
 OBSERVACOES = [
     None, None, None,
     "Errei por falta de atenção no enunciado.",
@@ -88,9 +123,6 @@ def criar_assunto(con, uid, mid, item, hoje, rnd, pai=None) -> int:
     if dias_atras is None:
         return 0
     inicio = hoje - timedelta(days=dias_atras)
-    if dias_atras == 1:
-        con.execute("INSERT INTO estudo_do_dia (usuario_id, assunto_id, data) VALUES (?, ?, ?)",
-                    (uid, aid, inicio.isoformat()))
     n = 0
     for d, acertos, total in simular(inicio, hoje, nivel, ganho, rnd):
         con.execute(
@@ -115,8 +147,13 @@ def criar_demo(con, hoje: date) -> int:
 
     rnd = random.Random(2026)
     n = 0
+    ids = {}
+    sid = con.execute("INSERT INTO secoes (usuario_id, nome, data_meta) VALUES (?, ?, ?)",
+                      (uid, SECAO[0], SECAO[1].format(ano=hoje.year + 1))).lastrowid
     for materia, assuntos in CURRICULO.items():
-        mid = con.execute("INSERT INTO materias (usuario_id, nome) VALUES (?, ?)", (uid, materia)).lastrowid
+        mid = con.execute("INSERT INTO materias (usuario_id, nome, secao_id) VALUES (?, ?, ?)",
+                          (uid, materia, sid)).lastrowid
+        ids[materia] = mid
         for item in assuntos:
             if isinstance(item[1], list):
                 pai = con.execute("INSERT INTO assuntos (usuario_id, materia_id, nome) VALUES (?, ?, ?)",
@@ -125,5 +162,20 @@ def criar_demo(con, hoje: date) -> int:
                     n += criar_assunto(con, uid, mid, sub, hoje, rnd, pai)
             else:
                 n += criar_assunto(con, uid, mid, item, hoje, rnd)
+    criar_flashcards(con, uid, ids, hoje)
     con.commit()
     return n
+
+
+def criar_flashcards(con, uid, ids: dict, hoje: date):
+    """Baralhos de exemplo: alguns cartões já respondidos (alguns vencem hoje) e alguns novos."""
+    for materia, baralhos in BARALHOS.items():
+        for nome, cartoes in baralhos.items():
+            bid = con.execute("INSERT INTO baralhos (usuario_id, materia_id, nome) VALUES (?, ?, ?)",
+                              (uid, ids[materia], nome)).lastrowid
+            for frente, verso, respostas in cartoes:
+                cid = con.execute("INSERT INTO cartoes (usuario_id, baralho_id, frente, verso, invertido) VALUES (?, ?, ?, ?, ?)",
+                                  (uid, bid, frente, verso, int(frente in INVERTIDOS))).lastrowid
+                for dias_atras, nota in respostas:
+                    con.execute("INSERT INTO respostas_cartao (usuario_id, cartao_id, data, nota) VALUES (?, ?, ?, ?)",
+                                (uid, cid, (hoje - timedelta(days=dias_atras)).isoformat(), nota))

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block titulo %}Flashcards{% endblock %}
+
+{# Baralhos agrupados por matéria. Cada cartão tem a própria agenda. #}
+{% set tem_baralhos = materias | selectattr('baralhos') | list | length > 0 %}
+
+{% block conteudo %}
+<div class="cab-pagina">
+  <div>
+    <p class="selo">Memorização</p>
+    <h1>Flashcards</h1>
+  </div>
+  {% if resumo and resumo.total %}
+  <a class="btn" href="{{ url_for('estudar') }}">Estudar {{ resumo.total }} cart{{ 'ões' if resumo.total > 1 else 'ão' }}</a>
+  {% endif %}
+</div>
+
+{% if not materias %}
+<div class="painel vazio">
+  <h2>Crie uma matéria primeiro</h2>
+  <p class="sub">Cada baralho fica dentro de uma matéria (ex.: Matemática → Fórmulas).</p>
+  <a class="btn" href="{{ url_for('materias') }}">Ir para Seções</a>
+</div>
+{% else %}
+
+<details class="painel fc-novo" {{ 'open' if not tem_baralhos }}>
+  <summary>+ Novo baralho</summary>
+  <form method="post" action="{{ url_for('criar_baralho') }}" class="linha-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <select name="materia_id" required aria-label="Matéria do baralho">
+      {% for m in materias %}<option value="{{ m.id }}">{% if m.secao %}{{ m.secao }} · {% endif %}{{ m.nome }}</option>{% endfor %}
+    </select>
+    <input type="text" name="nome" required maxlength="120" placeholder="Ex.: Fórmulas, Vocabulário, Tipos de questão" aria-label="Nome do baralho">
+    <button class="btn">Criar</button>
+  </form>
+</details>
+
+{% if not tem_baralhos %}
+<p class="sub fc-explica">Um baralho agrupa cartões de frente e verso, como fórmulas ou vocabulário. Você vira o cartão,
+  diz se acertou e o app marca quando ele volta, com a mesma lógica das questões. Se errar, ele volta na mesma
+  sessão até você acertar, como no Anki. Dá para usar imagens, fórmulas e cartões invertidos.</p>
+{% endif %}
+
+{% for m in materias if m.baralhos %}
+{% set para_hoje = m.baralhos | sum(attribute='revisar') %}
+<section class="sec">
+  <header class="sec-cab">
+    <div class="sec-titulo">
+      <h2>{{ m.nome }}</h2>
+      {% if m.secao %}<span class="sec-dias">{{ m.secao }}</span>{% endif %}
+      <span class="sec-meta">{{ m.baralhos | length }} baralho{{ 's' if m.baralhos | length > 1 }} · {{ m.baralhos | sum(attribute='total') }} cartões</span>
+    </div>
+    <a class="btn btn-fantasma btn-p" href="{{ url_for('estudar', materia=m.id) }}">Estudar a matéria</a>
+  </header>
+  <div class="fc-grade">
+    {% for b in m.baralhos %}
+    <article class="fc-baralho">
+      <div class="ac-cab">
+        <a class="ac-nome" href="{{ url_for('baralho', bid=b.id) }}">{{ b.nome }}</a>
+        <span class="mt-n">{{ b.total }} cart{{ 'ões' if b.total != 1 else 'ão' }}</span>
+      </div>
+      {# como no Anki: novos (azul), aprendendo (vermelho), para revisar (verde) #}
+      <div class="fc-cont">
+        <span class="cont-novo" title="Novos"><b>{{ b.novos }}</b> novo{{ 's' if b.novos != 1 }}</span>
+        {% if b.aprendendo %}<span class="cont-aprendendo" title="Errou hoje"><b>{{ b.aprendendo }}</b> aprendendo</span>{% endif %}
+        <span class="cont-revisar" title="Para revisar hoje"><b>{{ b.revisar }}</b> para revisar</span>
+      </div>
+      <div class="fc-acoes">
+        {% if b.revisar or b.novos or b.aprendendo %}
+        <a class="btn btn-p" href="{{ url_for('estudar', baralho=b.id) }}">Estudar</a>
+        {% else %}
+        <span class="mini">{{ 'Em dia' if b.total else 'Sem cartões' }}</span>
+        {% endif %}
+        <a class="btn btn-sec btn-p" href="{{ url_for('baralho', bid=b.id) }}">{{ 'Ver cartões' if b.total else 'Adicionar cartões' }}</a>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
+{% endif %}
+{% endblock %}

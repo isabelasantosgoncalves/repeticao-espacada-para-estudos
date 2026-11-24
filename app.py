@@ -23,6 +23,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import db as banco
 import logica as L
+import cartoes as C
 import servicos as S
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -72,7 +73,7 @@ def create_app(config: dict | None = None) -> Flask:
     app.config.update(
         SECRET_KEY=os.environ.get("SECRET_KEY") or "dev-troque-esta-chave",
         DATABASE=os.environ.get("DATABASE_PATH") or os.path.join(BASE_DIR, "estudos.db"),
-        MAX_CONTENT_LENGTH=5 * 1024 * 1024,  # limite para importação de JSON
+        MAX_CONTENT_LENGTH=30 * 1024 * 1024,  # limite para importar o JSON (com as imagens dos flashcards)
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         CSRF_ATIVO=True,
@@ -152,7 +153,7 @@ def registrar_filtros(app):
         return url_for("static", filename=arquivo, v=versao)
 
     app.jinja_env.globals["estatico"] = estatico
-    app.jinja_env.filters.update(br=br, relativo=relativo, pct=pct, cor=cor_dominio)
+    app.jinja_env.filters.update(br=br, relativo=relativo, pct=pct, cor=cor_dominio, meta_txt=S.meta_txt)
     # Sugestão de teto para cada combinação ritmo × fase (usada no onboarding/Configurações)
     sugestoes = {r: {f: L.sugerir_teto(r, f) for f in L.FASES_APRENDIZADO} for r in L.RITMOS}
     app.jinja_env.globals.update(csrf_token=csrf_token, NOMES_DIAS=S.NOMES_DIAS,
@@ -196,7 +197,7 @@ def validar_data(texto) -> date:
 
 def do_usuario(tabela: str, id_: int):
     """Busca um registro do usuário logado ou responde 404."""
-    assert tabela in ("materias", "assuntos", "sessoes", "ciclo_itens")
+    assert tabela in ("secoes", "materias", "assuntos", "sessoes", "ciclo_itens", "baralhos", "cartoes")
     row = banco.get_db().execute(
         f"SELECT * FROM {tabela} WHERE id = ? AND usuario_id = ?", (id_, current_user.id)
     ).fetchone()
@@ -212,7 +213,7 @@ def materias_com_assuntos(uid: int) -> list[dict]:
     """
     db = banco.get_db()
     materias = sorted((dict(m) for m in db.execute(
-        "SELECT id, nome, dias_estudo FROM materias WHERE usuario_id = ?", (uid,))), key=lambda m: S.chave_ordem(m["nome"]))
+        "SELECT id, nome, dias_estudo, secao_id FROM materias WHERE usuario_id = ?", (uid,))), key=lambda m: S.chave_ordem(m["nome"]))
     for m in materias:
         m["dias_estudo"] = S.ler_dias(m["dias_estudo"])
     por_materia: dict[int, list] = {m["id"]: [] for m in materias}
@@ -387,12 +388,19 @@ def registrar_rotas(app: Flask):
             dados["dias_fixos"] = request.form.getlist("dias_fixos")
             try:
                 S.salvar_config(db, current_user.id, dados, commit=False)
+                # Prova com data: já cria a seção (ex.: ENEM) com a data
+                meta = S.ler_campo_meta(request.form, "meta")
+                if meta:
+                    nome = nome_valido(request.form.get("prova_nome"), "da prova", 120)
+                    db.execute("INSERT INTO secoes (usuario_id, nome, data_meta) VALUES (?, ?, ?)",
+                               (current_user.id, nome, meta))
             except ValueError as e:
+                db.rollback()
                 flash(str(e) if "invalid literal" not in str(e) else "Confira os números informados.", "erro")
                 return render_template("onboarding.html", cfg=cfg)
             db.execute("UPDATE usuarios SET onboarding_ok = 1 WHERE id = ?", (current_user.id,))
             db.commit()
-            flash("Tudo pronto! Comece cadastrando suas seções e assuntos.", "ok")
+            flash("Tudo pronto! Agora cadastre suas matérias e os assuntos de cada uma.", "ok")
             return redirect(url_for("materias"))
         return render_template("onboarding.html", cfg=cfg)
 
@@ -403,6 +411,17 @@ def registrar_rotas(app: Flask):
     def hoje():
         dados = S.montar_hoje(banco.get_db(), current_user.id, S.hoje())
         return render_template("hoje.html", **dados)
+
+    @app.route("/hoje/mais", methods=["POST"])
+    @login_required
+    def fazer_mais_hoje():
+        """Atrasou: puxa para hoje mais revisões vencidas que ficaram fora do limite."""
+        texto = request.form.get("quantos", "")
+        quantos = None if texto == "todas" else (int(texto) if texto.isdigit() else 0)
+        n = S.puxar_revisoes(banco.get_db(), current_user.id, S.hoje(), quantos)
+        if n:
+            flash(f"{n} revis{'ões' if n > 1 else 'ão'} a mais na lista de hoje.", "ok")
+        return redirect(url_for("hoje") + "#revisao")
 
     @app.route("/hoje/registrar", methods=["POST"])
     @login_required
@@ -544,10 +563,7 @@ def registrar_rotas(app: Flask):
         for s in sessoes:
             s["pct"] = s["acertos"] / s["total"]
         cfg = S.carregar_config(db, current_user.id)
-        estado = L.analisar_assunto(
-            aid, [(date.fromisoformat(s["data"]), s["acertos"], s["total"]) for s in sessoes],
-            S.hoje(), S.questoes_fixas(cfg), fator=S.fator(cfg), tetos=S.tetos(cfg),
-            teto=cfg.get("teto_dias"), dias_estudo=S.dias_por_assunto(db, current_user.id, cfg).get(aid))
+        estado = S.estados(db, current_user.id, S.hoje(), cfg, ids={aid}).get(aid)
         grafico = {"labels": [br(s["data"]) for s in sessoes],
                    "valores": [round(s["pct"] * 100, 1) for s in sessoes]}
 
@@ -571,13 +587,258 @@ def registrar_rotas(app: Flask):
                                estado=estado, grafico=grafico, pai=pai, filhos=filhos,
                                dominio_grupo=dominio_grupo)
 
+    # ------------------------------------------------------------- flashcards
+
+    @app.route("/flashcards")
+    @login_required
+    def flashcards():
+        db = banco.get_db()
+        return render_template("flashcards.html", materias=C.listar_baralhos(db, current_user.id, S.hoje()),
+                               resumo=C.resumo_hoje(db, current_user.id, S.hoje()))
+
+    @app.route("/flashcards/baralhos/novo", methods=["POST"])
+    @login_required
+    def criar_baralho():
+        try:
+            nome = nome_valido(request.form.get("nome"), "do baralho", 120)
+            mid = ler_inteiro(request.form.get("materia_id"), "matéria")
+        except ValueError as e:
+            flash(str(e), "erro")
+            return redirect(url_for("flashcards"))
+        do_usuario("materias", mid)
+        bid = banco.get_db().execute("INSERT INTO baralhos (usuario_id, materia_id, nome) VALUES (?, ?, ?)",
+                                     (current_user.id, mid, nome)).lastrowid
+        banco.get_db().commit()
+        flash("Baralho criado. Agora adicione os cartões.", "ok")
+        return redirect(url_for("baralho", bid=bid))
+
+    @app.route("/flashcards/baralhos/<int:bid>")
+    @login_required
+    def baralho(bid):
+        db = banco.get_db()
+        b = dict(do_usuario("baralhos", bid))
+        b["materia"] = db.execute("SELECT nome FROM materias WHERE id = ?", (b["materia_id"],)).fetchone()["nome"]
+        # um item por cartão, com a próxima revisão do lado que vence primeiro
+        por_cartao: dict[int, dict] = {}
+        for lado in C.cartoes_com_agenda(db, current_user.id, S.hoje(), baralho_id=bid):
+            atual = por_cartao.get(lado["id"])
+            if atual is None or (lado["proxima"] or date.min) < (atual["proxima"] or date.min):
+                por_cartao[lado["id"]] = lado
+        lista = sorted(por_cartao.values(), key=lambda c: -c["id"])
+        f = C.fila(db, current_user.id, S.hoje(), baralho_id=bid)
+        materias_b = sorted((dict(m) for m in db.execute("SELECT id, nome FROM materias WHERE usuario_id = ?",
+                                                         (current_user.id,))), key=lambda m: S.chave_ordem(m["nome"]))
+        return render_template("baralho.html", b=b, cartoes=lista, fila=f, materias=materias_b,
+                               busca=(request.args.get("q") or "").strip())
+
+    @app.route("/flashcards/baralhos/<int:bid>/editar", methods=["POST"])
+    @login_required
+    def editar_baralho(bid):
+        do_usuario("baralhos", bid)
+        try:
+            nome = nome_valido(request.form.get("nome"), "do baralho", 120)
+            mid = ler_inteiro(request.form.get("materia_id"), "matéria")
+            do_usuario("materias", mid)
+            banco.get_db().execute("UPDATE baralhos SET nome = ?, materia_id = ? WHERE id = ? AND usuario_id = ?",
+                                   (nome, mid, bid, current_user.id))
+            banco.get_db().commit()
+            flash("Baralho atualizado.", "ok")
+        except ValueError as e:
+            flash(str(e), "erro")
+        return redirect(url_for("baralho", bid=bid))
+
+    @app.route("/flashcards/baralhos/<int:bid>/excluir", methods=["POST"])
+    @login_required
+    def excluir_baralho(bid):
+        do_usuario("baralhos", bid)
+        db = banco.get_db()
+        db.execute("DELETE FROM baralhos WHERE id = ? AND usuario_id = ?", (bid, current_user.id))
+        C.apagar_imagens_soltas(db, current_user.id)
+        db.commit()
+        flash("Baralho excluído, com os cartões.", "ok")
+        return redirect(url_for("flashcards"))
+
+    def imagem_do_form(campo: str, atual: int | None = None) -> int | None:
+        """Imagem enviada (ou colada) no formulário; "remover_<campo>" tira a atual."""
+        arq = request.files.get(campo)
+        if arq and arq.filename:
+            return C.guardar_imagem(banco.get_db(), current_user.id, arq.read())
+        if request.form.get(f"remover_{campo}"):
+            return None
+        return atual
+
+    def textos_do_cartao(img_frente, img_verso) -> tuple[str, str]:
+        frente = (request.form.get("frente") or "").strip()[:2000]
+        verso = (request.form.get("verso") or "").strip()[:2000]
+        if not (frente or img_frente) or not (verso or img_verso):
+            raise ValueError("Preencha a frente e o verso do cartão (texto ou imagem).")
+        return frente, verso
+
+    @app.route("/flashcards/baralhos/<int:bid>/cartoes", methods=["POST"])
+    @login_required
+    def criar_cartoes(bid):
+        do_usuario("baralhos", bid)
+        db = banco.get_db()
+        invertido = 1 if request.form.get("invertido") else 0
+        try:
+            if request.form.get("lote") is not None:
+                for frente, verso in C.ler_em_lote(request.form.get("lote")):
+                    db.execute("INSERT INTO cartoes (usuario_id, baralho_id, frente, verso, invertido) VALUES (?, ?, ?, ?, ?)",
+                               (current_user.id, bid, frente, verso, invertido))
+            else:
+                img_f, img_v = imagem_do_form("imagem_frente"), imagem_do_form("imagem_verso")
+                frente, verso = textos_do_cartao(img_f, img_v)
+                db.execute("""INSERT INTO cartoes (usuario_id, baralho_id, frente, verso, invertido, imagem_frente, imagem_verso)
+                              VALUES (?, ?, ?, ?, ?, ?, ?)""", (current_user.id, bid, frente, verso, invertido, img_f, img_v))
+        except ValueError as e:
+            db.rollback()
+            flash(str(e), "erro")
+            return redirect(url_for("baralho", bid=bid) + "#novo")
+        db.commit()
+        if request.form.get("lote") is not None:
+            n = len(C.ler_em_lote(request.form.get("lote")))
+            flash(f"{n} cart{'ões' if n > 1 else 'ão'} adicionado{'s' if n > 1 else ''}.", "ok")
+            return redirect(url_for("baralho", bid=bid) + "#lote")
+        flash("Cartão adicionado.", "ok")
+        return redirect(url_for("baralho", bid=bid) + "#novo")
+
+    def voltar_do_cartao(c):
+        """Depois de mexer num cartão: volta para o estudo (se veio dele) ou para o baralho."""
+        if request.form.get("voltar") == "estudo":
+            args = {k: v for k, v in (("baralho", request.form.get("baralho", type=int)),
+                                      ("materia", request.form.get("materia", type=int))) if v}
+            return redirect(url_for("estudar", **args))
+        return redirect(url_for("baralho", bid=c["baralho_id"]) + f"#cartao-{c['id']}")
+
+    @app.route("/flashcards/cartoes/<int:cid>/editar", methods=["POST"])
+    @login_required
+    def editar_cartao(cid):
+        c = do_usuario("cartoes", cid)
+        db = banco.get_db()
+        try:
+            img_f = imagem_do_form("imagem_frente", c["imagem_frente"])
+            img_v = imagem_do_form("imagem_verso", c["imagem_verso"])
+            frente, verso = textos_do_cartao(img_f, img_v)
+            invertido = (1 if request.form.get("invertido") else 0) if "tem_invertido" in request.form else c["invertido"]
+            db.execute("""UPDATE cartoes SET frente = ?, verso = ?, invertido = ?, imagem_frente = ?, imagem_verso = ?
+                          WHERE id = ? AND usuario_id = ?""", (frente, verso, invertido, img_f, img_v, cid, current_user.id))
+            C.apagar_imagens_soltas(db, current_user.id)
+            db.commit()
+            flash("Cartão atualizado.", "ok")
+        except ValueError as e:
+            db.rollback()
+            flash(str(e), "erro")
+        return voltar_do_cartao(c)
+
+    @app.route("/flashcards/cartoes/<int:cid>/excluir", methods=["POST"])
+    @login_required
+    def excluir_cartao(cid):
+        c = do_usuario("cartoes", cid)
+        db = banco.get_db()
+        db.execute("DELETE FROM cartoes WHERE id = ? AND usuario_id = ?", (cid, current_user.id))
+        C.apagar_imagens_soltas(db, current_user.id)
+        db.commit()
+        flash("Cartão excluído.", "ok")
+        if request.form.get("voltar") == "estudo":
+            return voltar_do_cartao(c)
+        return redirect(url_for("baralho", bid=c["baralho_id"]))
+
+    @app.route("/flashcards/cartoes/<int:cid>/suspender", methods=["POST"])
+    @login_required
+    def suspender_cartao(cid):
+        """Suspender tira o cartão do estudo até reativar (de novo = reativa)."""
+        c = do_usuario("cartoes", cid)
+        novo = 0 if c["suspenso"] else 1
+        banco.get_db().execute("UPDATE cartoes SET suspenso = ? WHERE id = ? AND usuario_id = ?",
+                               (novo, cid, current_user.id))
+        banco.get_db().commit()
+        flash("Cartão suspenso: ele não aparece no estudo até você reativar." if novo else "Cartão reativado.", "ok")
+        return voltar_do_cartao(c)
+
+    @app.route("/flashcards/cartoes/<int:cid>/adiar", methods=["POST"])
+    @login_required
+    def adiar_cartao(cid):
+        """Adiar tira o cartão só de hoje: amanhã ele volta."""
+        c = do_usuario("cartoes", cid)
+        banco.get_db().execute("UPDATE cartoes SET adiado = ? WHERE id = ? AND usuario_id = ?",
+                               (S.hoje().isoformat(), cid, current_user.id))
+        banco.get_db().commit()
+        flash("Cartão adiado para amanhã.", "ok")
+        return voltar_do_cartao(c)
+
+    @app.route("/flashcards/imagens/<int:iid>")
+    @login_required
+    def imagem_cartao(iid):
+        r = banco.get_db().execute("SELECT tipo, dados FROM imagens WHERE id = ? AND usuario_id = ?",
+                                   (iid, current_user.id)).fetchone()
+        if r is None:
+            abort(404)
+        return Response(r["dados"], mimetype=r["tipo"], headers={"Cache-Control": "private, max-age=86400"})
+
+    def escopo_estudo():
+        """Estudar um baralho, uma matéria ou tudo (?baralho= / ?materia=)."""
+        bid = request.values.get("baralho", type=int)
+        mid = request.values.get("materia", type=int)
+        if bid:
+            do_usuario("baralhos", bid)
+        if mid:
+            do_usuario("materias", mid)
+        return bid, mid
+
+    @app.route("/flashcards/estudar")
+    @login_required
+    def estudar():
+        db = banco.get_db()
+        bid, mid = escopo_estudo()
+        f = C.fila(db, current_user.id, S.hoje(), baralho_id=bid, materia_id=mid)
+        titulo = "Todos os baralhos"
+        if bid:
+            titulo = do_usuario("baralhos", bid)["nome"]
+        elif mid:
+            titulo = do_usuario("materias", mid)["nome"]
+        cartao = f["cartoes"][0] if f["cartoes"] else None
+        feitos = db.execute("SELECT COUNT(*) FROM respostas_cartao WHERE usuario_id = ? AND data = ?",
+                            (current_user.id, S.hoje().isoformat())).fetchone()[0]
+        return render_template("estudar.html", cartao=cartao, fila=f, titulo=titulo, bid=bid, mid=mid, feitos=feitos)
+
+    @app.route("/flashcards/responder", methods=["POST"])
+    @login_required
+    def responder_cartao():
+        db = banco.get_db()
+        bid, mid = escopo_estudo()
+        cid = request.form.get("cartao_id", type=int)
+        nota = request.form.get("nota")
+        if cid and nota in L.NOTAS_CARTAO:
+            c = do_usuario("cartoes", cid)
+            lado = 1 if request.form.get("lado", type=int) and c["invertido"] else 0
+            C.responder(db, current_user.id, cid, lado, nota, S.hoje())
+        args = {k: v for k, v in (("baralho", bid), ("materia", mid)) if v}
+        return redirect(url_for("estudar", **args))
+
+    @app.route("/flashcards/desfazer", methods=["POST"])
+    @login_required
+    def desfazer_resposta():
+        """Desfaz a última resposta de hoje: o cartão volta para a fila."""
+        bid, mid = escopo_estudo()
+        if C.desfazer(banco.get_db(), current_user.id, S.hoje()):
+            flash("Última resposta desfeita.", "ok")
+        args = {k: v for k, v in (("baralho", bid), ("materia", mid)) if v}
+        return redirect(url_for("estudar", **args))
+
     # ------------------------------------------------------- matérias/assuntos
 
     @app.route("/materias")
     @login_required
     def materias():
         cfg_m = S.carregar_config(banco.get_db(), current_user.id)
-        return render_template("materias.html", materias=materias_com_assuntos(current_user.id),
+        todas = materias_com_assuntos(current_user.id)
+        secoes = S.listar_secoes(banco.get_db(), current_user.id)
+        hoje_d = S.hoje()
+        for sec in secoes:
+            sec["materias"] = [m for m in todas if m["secao_id"] == sec["id"]]
+            sec["faltam"] = (sec["meta"] - hoje_d).days if sec["meta"] else None
+        soltas = [m for m in todas if not m["secao_id"]]
+        return render_template("materias.html", materias=todas, secoes=secoes, soltas=soltas,
                                cfg=cfg_m, ciclo=S.ler_ciclo(banco.get_db(), current_user.id),
                                vez_ids=[it["id"] for it in S.vez_do_ciclo(banco.get_db(), current_user.id, S.hoje(), cfg_m)],
                                editando=request.args.get("editar", type=int))
@@ -599,23 +860,73 @@ def registrar_rotas(app: Flask):
         args = {"editar": mid} if mid and request.form.get("editando") else {}
         return redirect(url_for("materias", **args) + (f"#materia-{mid}" if mid else ""))
 
+    def secao_do_form():
+        """Seção escolhida num formulário (vazio = sem seção), conferindo o dono."""
+        sid = request.form.get("secao_id", type=int)
+        if sid:
+            do_usuario("secoes", sid)
+        return sid or None
+
+    @app.route("/secoes/nova", methods=["POST"])
+    @login_required
+    def criar_secao():
+        try:
+            nome = nome_valido(request.form.get("nome"), "da seção", 120)
+            meta = S.ler_campo_meta(request.form, "meta")
+        except ValueError as e:
+            flash(str(e), "erro")
+            return redirect(url_for("materias"))
+        sid = banco.get_db().execute("INSERT INTO secoes (usuario_id, nome, data_meta) VALUES (?, ?, ?)",
+                                     (current_user.id, nome, meta)).lastrowid
+        banco.get_db().commit()
+        flash("Seção criada. Agora adicione as matérias dela.", "ok")
+        return redirect(url_for("materias") + f"#secao-{sid}")
+
+    @app.route("/secoes/<int:sid>/editar", methods=["POST"])
+    @login_required
+    def editar_secao(sid):
+        do_usuario("secoes", sid)
+        try:
+            nome = nome_valido(request.form.get("nome"), "da seção", 120)
+            meta = S.ler_campo_meta(request.form, "meta")
+            banco.get_db().execute("UPDATE secoes SET nome = ?, data_meta = ? WHERE id = ? AND usuario_id = ?",
+                                   (nome, meta, sid, current_user.id))
+            banco.get_db().commit()
+            flash("Seção atualizada.", "ok")
+        except ValueError as e:
+            flash(str(e), "erro")
+        return redirect(url_for("materias") + f"#secao-{sid}")
+
+    @app.route("/secoes/<int:sid>/excluir", methods=["POST"])
+    @login_required
+    def excluir_secao(sid):
+        do_usuario("secoes", sid)
+        banco.get_db().execute("DELETE FROM secoes WHERE id = ? AND usuario_id = ?", (sid, current_user.id))
+        banco.get_db().commit()
+        flash("Seção excluída. As matérias dela continuam, sem seção.", "ok")
+        return redirect(url_for("materias"))
+
     @app.route("/materias/nova", methods=["POST"])
     @login_required
     def criar_materia():
+        sid = secao_do_form()
+
         def acao():
-            nome = nome_valido(request.form.get("nome"), "da seção", 120)
-            return banco.get_db().execute("INSERT INTO materias (usuario_id, nome) VALUES (?, ?)",
-                                          (current_user.id, nome)).lastrowid
-        return executar(acao, "Seção criada.")
+            nome = nome_valido(request.form.get("nome"), "da matéria", 120)
+            return banco.get_db().execute("INSERT INTO materias (usuario_id, nome, secao_id) VALUES (?, ?, ?)",
+                                          (current_user.id, nome, sid)).lastrowid
+        return executar(acao, "Matéria criada.")
 
     @app.route("/materias/<int:mid>/editar", methods=["POST"])
     @login_required
     def editar_materia(mid):
-        do_usuario("materias", mid)
+        atual = do_usuario("materias", mid)
+        sid = secao_do_form() if "secao_id" in request.form else atual["secao_id"]
+
         def acao():
-            nome = nome_valido(request.form.get("nome"), "da seção", 120)
-            # "Quando estudo esta seção": todo dia (vazio) ou dias escolhidos
-            # Sem o campo (pessoa estuda todas as seções todo dia): mantém o que já estava salvo
+            nome = nome_valido(request.form.get("nome"), "da matéria", 120)
+            # "Quando estudo esta matéria": todo dia (vazio) ou dias escolhidos
+            # Sem o campo (pessoa estuda todas as matérias todo dia): mantém o que já estava salvo
             if "frequencia" not in request.form:
                 dias = banco.get_db().execute("SELECT dias_estudo FROM materias WHERE id = ?", (mid,)).fetchone()[0]
             else:
@@ -623,11 +934,11 @@ def registrar_rotas(app: Flask):
             if request.form.get("frequencia") == "dias":
                 dias = ",".join(map(str, S.ler_dias(",".join(request.form.getlist("dias_estudo")))))
                 if not dias:
-                    raise ValueError("Escolha pelo menos um dia de estudo para a seção.")
+                    raise ValueError("Escolha pelo menos um dia de estudo para a matéria.")
             banco.get_db().execute(
-                "UPDATE materias SET nome = ?, dias_estudo = ? WHERE id = ? AND usuario_id = ?",
-                (nome, dias, mid, current_user.id))
-        return executar(acao, "Seção atualizada.", mid)
+                "UPDATE materias SET nome = ?, dias_estudo = ?, secao_id = ? WHERE id = ? AND usuario_id = ?",
+                (nome, dias, sid, mid, current_user.id))
+        return executar(acao, "Matéria atualizada.", mid)
 
     @app.route("/materias/<int:mid>/excluir", methods=["POST"])
     @login_required
@@ -635,7 +946,7 @@ def registrar_rotas(app: Flask):
         do_usuario("materias", mid)
         def acao():
             banco.get_db().execute("DELETE FROM materias WHERE id = ? AND usuario_id = ?", (mid, current_user.id))
-        return executar(acao, "Seção excluída, com seus assuntos e práticas.")
+        return executar(acao, "Matéria excluída, com seus assuntos e práticas.")
 
     @app.route("/assuntos/novo", methods=["POST"])
     @login_required
@@ -651,7 +962,7 @@ def registrar_rotas(app: Flask):
                     raise ValueError("Subassuntos não podem ter outros subassuntos.")
                 mid = pai["materia_id"]
             else:
-                mid = ler_inteiro(request.form.get("materia_id"), "seção")
+                mid = ler_inteiro(request.form.get("materia_id"), "matéria")
                 do_usuario("materias", mid)
             banco.get_db().execute(
                 "INSERT INTO assuntos (usuario_id, materia_id, nome, parent_id) VALUES (?, ?, ?, ?)",
@@ -706,7 +1017,7 @@ def registrar_rotas(app: Flask):
     def ciclo_adicionar():
         mid = request.form.get("materia_id", type=int)
         if not mid:
-            flash("Escolha uma seção para adicionar ao ciclo.", "erro")
+            flash("Escolha uma matéria para adicionar ao ciclo.", "erro")
             return voltar_ciclo()
         do_usuario("materias", mid)
         db = banco.get_db()
@@ -750,7 +1061,7 @@ def registrar_rotas(app: Flask):
     @app.route("/ciclo/<int:iid>/pular", methods=["POST"])
     @login_required
     def ciclo_pular(iid):
-        """Passa a vez da seção hoje: ela vai para o fim da rodada e entra a próxima."""
+        """Passa a vez da matéria hoje: ela vai para o fim da rodada e entra a próxima."""
         do_usuario("ciclo_itens", iid)
         db = banco.get_db()
         db.execute("UPDATE ciclo_itens SET rodada = rodada + 1 WHERE id = ? AND usuario_id = ?",
@@ -768,12 +1079,20 @@ def registrar_rotas(app: Flask):
             dados = dict(request.form)
             dados["dias_fixos"] = request.form.getlist("dias_fixos")
             try:
-                S.salvar_config(db, current_user.id, dados)
+                S.salvar_config(db, current_user.id, dados, commit=False)
+                # data da prova de cada seção
+                for sec in db.execute("SELECT id FROM secoes WHERE usuario_id = ?", (current_user.id,)).fetchall():
+                    if f"meta_{sec['id']}_tipo" in request.form:
+                        db.execute("UPDATE secoes SET data_meta = ? WHERE id = ? AND usuario_id = ?",
+                                   (S.ler_campo_meta(request.form, f"meta_{sec['id']}"), sec["id"], current_user.id))
+                db.commit()
                 flash("Configurações salvas.", "ok")
             except ValueError as e:
+                db.rollback()
                 flash(str(e) if "invalid literal" not in str(e) else "Confira os números informados.", "erro")
             return redirect(url_for("configuracoes"))
-        return render_template("configuracoes.html", cfg=S.carregar_config(db, current_user.id))
+        return render_template("configuracoes.html", cfg=S.carregar_config(db, current_user.id),
+                               secoes=S.listar_secoes(db, current_user.id))
 
     @app.route("/configuracoes/exportar")
     @login_required
@@ -802,7 +1121,8 @@ def registrar_rotas(app: Flask):
         except (S.ErroImportacao, ValueError) as e:
             flash(f"Importação cancelada: {e}", "erro")
         else:
-            flash(f"Importado: {r['materias']} seções, {r['assuntos']} assuntos e {r['sessoes']} práticas.", "ok")
+            flash(f"Importado: {r['materias']} matérias, {r['assuntos']} assuntos, {r['sessoes']} práticas"
+                  f" e {r['cartoes']} flashcards.", "ok")
         return redirect(url_for("configuracoes"))
 
 

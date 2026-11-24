@@ -19,26 +19,38 @@
   {% set pagina = request.endpoint %}
   <header class="topo">
     <div class="topo-in">
-      <a class="marca" href="{{ url_for('landing') }}">
+      <a class="marca" href="{{ url_for('hoje') if current_user.is_authenticated and current_user.onboarding_ok else url_for('landing') }}">
         <img src="{{ url_for('static', filename='favicon.svg') }}" alt="" width="30" height="30">
         <span>Revisa</span>
       </a>
       {% if current_user.is_authenticated and current_user.onboarding_ok %}
       <nav class="nav" aria-label="Principal">
-        <a href="{{ url_for('hoje') }}" class="{{ 'ativo' if pagina == 'hoje' }}">Hoje</a>
-        <a href="{{ url_for('nova_sessao') }}" class="{{ 'ativo' if pagina in ('nova_sessao', 'editar_sessao') }}">Registrar prática</a>
+        <a href="{{ url_for('hoje') }}" class="nav-casa {{ 'ativo' if pagina in ('hoje', 'vencimentos') }}" title="Hoje" aria-label="Hoje">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M3.5 10.5 12 3.8l8.5 6.7V20a1 1 0 0 1-1 1h-5v-6.2h-5V21h-5a1 1 0 0 1-1-1z"/></svg>
+        </a>
         <a href="{{ url_for('mapa') }}" class="{{ 'ativo' if pagina in ('mapa', 'historico') }}">Mapa</a>
+        <a href="{{ url_for('flashcards') }}" class="{{ 'ativo' if pagina in ('flashcards', 'baralho', 'estudar') }}">Flashcards</a>
         <a href="{{ url_for('materias') }}" class="{{ 'ativo' if pagina == 'materias' }}">Seções</a>
-        <a href="{{ url_for('configuracoes') }}" class="{{ 'ativo' if pagina == 'configuracoes' }}">Configurações</a>
       </nav>
       {% endif %}
       <div class="topo-dir">
         {% if current_user.is_authenticated %}
-          <span class="ola">Olá, {{ current_user.primeiro_nome }}</span>
-          <form method="post" action="{{ url_for('sair') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-fantasma btn-p" type="submit">Sair</button>
-          </form>
+          {% if current_user.onboarding_ok %}
+          <a class="btn btn-p topo-pratica {{ 'ativo' if pagina in ('nova_sessao', 'editar_sessao') }}" href="{{ url_for('nova_sessao') }}" title="Registrar prática">+ Prática</a>
+          <a class="topo-icone {{ 'ativo' if pagina == 'configuracoes' }}" href="{{ url_for('configuracoes') }}" title="Configurações" aria-label="Configurações">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.4 7.4 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 2.6-1.5l2.4 1 2-3.4z"/></svg>
+          </a>
+          {% endif %}
+          <details class="conta">
+            <summary class="conta-btn" title="Sua conta" aria-label="Sua conta">{{ current_user.primeiro_nome[:1] | upper }}</summary>
+            <div class="conta-menu">
+              <p class="conta-nome">{{ current_user.nome }}</p>
+              <form method="post" action="{{ url_for('sair') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="conta-sair" type="submit">Sair</button>
+              </form>
+            </div>
+          </details>
         {% else %}
           <a class="btn btn-fantasma btn-p" href="{{ url_for('entrar') }}">Entrar</a>
           <a class="btn btn-p" href="{{ url_for('cadastro') }}">Criar conta</a>

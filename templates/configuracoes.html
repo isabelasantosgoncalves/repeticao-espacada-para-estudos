@@ -19,18 +19,34 @@
     Resultado médio (50 a 84%) volta na metade do tempo; abaixo de 50%, no dia seguinte.</p>
   {{ campos.aprendizado(cfg) }}
 
+  <h2 id="prova">Data da prova</h2>
+  <p class="sub">A prova fica na seção (ex.: ENEM) e vale para todas as matérias dela. Nenhuma revisão passa da prova,
+    e o painel mostra a contagem regressiva. Com só o mês, o app conta a partir do dia 1º.</p>
+  {% if secoes %}
+  <div class="meta-secoes">
+    {% for g in secoes %}
+    <div class="meta-secao">
+      <b>{{ g.nome }}</b>
+      {{ campos.meta('meta_' ~ g.id, g.data_meta) }}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="mini meta-vazio">Crie uma seção (ex.: ENEM) em <a href="{{ url_for('materias') }}">Seções</a> para marcar a data da prova.</p>
+  {% endif %}
+
   <h2>Máximo de dias sem revisão</h2>
   <p class="sub">Mesmo dominado, nenhum assunto fica mais tempo que isso sem revisão.
     <b>Livre</b> deixa o intervalo dobrar até 1 ano, para quem estuda a longo prazo, sem prova marcada.</p>
   {{ campos.teto(cfg) }}
 
-  <h2>Seções na semana</h2>
-  <p class="sub">Quais seções entram na revisão de cada dia.</p>
+  <h2>Matérias na semana</h2>
+  <p class="sub">Quais matérias entram na revisão de cada dia.</p>
   {{ campos.distribuicao(cfg) }}
 
   <div data-secao="secoes_dia">
-    <h2>Seções por dia no ciclo</h2>
-    <p class="sub">Quantas seções da fila você estuda por dia.</p>
+    <h2>Matérias por dia no ciclo</h2>
+    <p class="sub">Quantas matérias da fila você estuda por dia.</p>
     {{ campos.secoes_por_dia(cfg) }}
   </div>
 
@@ -44,8 +60,8 @@
   </div>
 
   <div data-secao="minima">
-    <h2>Limite por seção</h2>
-    <p class="sub">Máximo de assuntos de cada seção na revisão do dia. Entram primeiro os que mais precisam.</p>
+    <h2>Limite por matéria</h2>
+    <p class="sub">Máximo de assuntos de cada matéria na revisão do dia. Entram primeiro os que mais precisam.</p>
     {{ campos.minima(cfg) }}
   </div>
 
@@ -57,7 +73,7 @@
 
 <section class="painel">
   <h2>Seus dados</h2>
-  <p class="sub">Backup em JSON com seções, assuntos, práticas e configurações.</p>
+  <p class="sub">Backup em JSON com seções, matérias, assuntos, práticas, flashcards e configurações.</p>
   <a class="btn btn-sec" href="{{ url_for('exportar') }}">Exportar meus dados</a>
 
   <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" class="form importar">
@@ -65,9 +81,9 @@
     <h3>Importar dados</h3>
     <input type="file" name="arquivo" accept=".json,application/json" required aria-label="Arquivo JSON">
     <label class="check"><input type="checkbox" name="confirmar" value="1" required>
-      Entendo que a importação <b>substitui</b> minhas seções, assuntos e práticas atuais.</label>
+      Entendo que a importação <b>substitui</b> minhas seções, matérias, assuntos, práticas e flashcards atuais.</label>
     <button class="btn" type="submit">Importar</button>
   </form>
 </section>
 {% endblock %}
-{% block scripts %}<script>Revisa.config(document.getElementById('form-config')); Revisa.teto(document.getElementById('form-config'), false); Revisa.sequencias(document.getElementById('form-config'));</script>{% endblock %}
+{% block scripts %}<script>Revisa.config(document.getElementById('form-config')); Revisa.teto(document.getElementById('form-config'), false); Revisa.sequencias(document.getElementById('form-config')); Revisa.metas(document.getElementById('form-config'));</script>{% endblock %}

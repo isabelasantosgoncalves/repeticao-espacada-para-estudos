@@ -184,6 +184,10 @@ def calcular_intervalo(
     - Fase de aprendizado: depois da sessão n (n <= len(tetos)) o intervalo
       fica limitado a tetos[n-1]. O bônus seguinte parte do valor limitado,
       então um assunto novo cresce aos poucos (7 -> 15 -> 30 -> 60).
+    - Tamanho da prática: o intervalo ANDA até o valor acima na proporção das
+      questões feitas em relação às sugeridas (ver peso_do_passo). Fez as
+      sugeridas: anda o passo inteiro; fez metade: anda metade do caminho
+      (para cima ou para baixo). Assim poucas questões nunca "provam" demais.
     - Ritmo: no fim, o intervalo é multiplicado por `fator` (mínimo 1 dia).
     - Teto do usuário: o resultado final nunca passa de `teto` dias.
     """
@@ -191,25 +195,45 @@ def calcular_intervalo(
         raise ValueError("é preciso ao menos uma sessão")
     if totais is None:
         totais = [None] * len(percentuais)
-    intervalo = 0
+    intervalo = 1   # antes da primeira prática: como se voltasse no dia seguinte
     sequencia = 0
-    sugeridas = 0   # questões que o app sugeria antes da sessão atual
+    sugeridas = questoes_sugeridas(0.0, questoes_fixas)   # o que o app pede para um assunto novo
     for i, pct in enumerate(percentuais):
+        anterior = intervalo
         dom = dominio(percentuais[: i + 1], totais[: i + 1])
         dias_tabela, _ = faixa_da_tabela(dom)
         sequencia = sequencia + 1 if pct + EPS >= LIMIAR_BOM else 0
         if sequencia >= 2 and dom + EPS >= LIMIAR_BOM:
-            crescido = round(intervalo * fator_bonus(totais[i], sugeridas))
-            intervalo = min(max(crescido, dias_tabela), INTERVALO_MAXIMO)
+            # bônus: dobra (o tamanho da prática entra logo abaixo, no passo)
+            alvo = min(max(intervalo * 2, dias_tabela), INTERVALO_MAXIMO)
         else:
-            intervalo = dias_tabela
+            alvo = dias_tabela
         if i < len(tetos):
-            intervalo = intervalo_na_fase(tetos[i], dom)
+            alvo = intervalo_na_fase(tetos[i], dom)
+        intervalo = max(1, arredondar(anterior + (alvo - anterior) * peso_do_passo(totais[i], sugeridas)))
         sugeridas = questoes_sugeridas(dom, questoes_fixas)
     final = aplicar_ritmo(intervalo, fator)
     if teto:
         final = min(final, teto)
     return final, sequencia
+
+
+def peso_do_passo(total: int | None, sugeridas: int) -> float:
+    """
+    Quanto o intervalo anda numa prática: questões feitas / questões que o app
+    sugeria para aquele assunto (o número fixo escolhido, ou o da tabela),
+    contando no máximo 10 como referência. Sem o total, anda o passo inteiro.
+      sugeridas 10, fez 5 -> 0,5     sugeridas 4, fez 5 -> 1     fixo 5, fez 2 -> 0,4
+    """
+    if total is None:
+        return 1.0
+    referencia = min(QUESTOES_REFERENCIA, max(1, sugeridas))
+    return min(1.0, max(0, total) / referencia)
+
+
+def arredondar(x: float) -> int:
+    """Arredonda com o "meio" para baixo (4,5 -> 4), como o ritmo."""
+    return ceil(x - 0.5 - 1e-9)
 
 
 def intervalo_na_fase(teto_fase: int, dom: float) -> int:
@@ -296,6 +320,20 @@ class EstadoAssunto:
         return self.n_sessoes <= self.fase_total
 
 
+def juntar_por_dia(sessoes: list[tuple[date, int, int]]) -> list[tuple[date, int, int]]:
+    """
+    Práticas do mesmo assunto no mesmo dia contam como UMA só, somando acertos
+    e total (ex.: 5/5 de manhã + 3/5 à tarde = 8/10 naquele dia). No histórico
+    elas continuam separadas; a junção é só para o cálculo.
+    """
+    por_dia: dict[date, list[int]] = {}
+    for d, acertos, total in sessoes:
+        soma = por_dia.setdefault(d, [0, 0])
+        soma[0] += acertos
+        soma[1] += total
+    return [(d, a, t) for d, (a, t) in sorted(por_dia.items())]
+
+
 def analisar_assunto(
     assunto_id: int,
     sessoes: list[tuple[date, int, int]],
@@ -306,6 +344,7 @@ def analisar_assunto(
     teto: int | None = None,
     dias_estudo: list[int] | None = None,
     folga: int = 0,
+    meta: date | None = None,
 ) -> EstadoAssunto | None:
     """
     Calcula o estado de um assunto a partir das suas sessões.
@@ -313,14 +352,17 @@ def analisar_assunto(
     """
     if not sessoes:
         return None
-    # Ordenação estável: mantém a ordem de registro entre sessões do mesmo dia.
-    sessoes = sorted(sessoes, key=lambda s: s[0])
-    pcts = [percentual(acertos, total) for _, acertos, total in sessoes]
+    sessoes = juntar_por_dia(sessoes)
+    pcts =[percentual(acertos, total) for _, acertos, total in sessoes]
     totais = [total for _, _, total in sessoes]
 
     dom = dominio(pcts, totais)
     intervalo, sequencia = calcular_intervalo(pcts, totais, questoes_fixas, tetos=tetos, fator=fator, teto=teto)
     ultima_data = sessoes[-1][0]
+    # Data da meta (prova): o intervalo nunca passa dela (ver limite_pela_meta).
+    limite = limite_pela_meta(ultima_data, meta)
+    if limite:
+        intervalo = min(intervalo, limite)
     # Revisão que cairia num dia sem estudo daquela seção vai para o próximo dia de estudo.
     proxima = ajustar_para_dia_de_estudo(ultima_data + timedelta(days=intervalo), dias_estudo)
     # `folga`: no ciclo de estudos, a seção pode demorar alguns dias para chegar
@@ -343,6 +385,72 @@ def analisar_assunto(
         questoes=questoes_sugeridas(dom, questoes_fixas),
         fase_total=len(tetos),
     )
+
+
+# ---------------------------------------------------------------------------
+# Data da meta (prova)
+# ---------------------------------------------------------------------------
+
+RETA_FINAL = 30            # últimos 30 dias antes da prova
+MARGEM_MIN, MARGEM_MAX = 7, 60   # dias reservados só para revisar, antes da prova
+
+
+def limite_pela_meta(ultima: date, meta: date | None) -> int | None:
+    """
+    Máximo de dias até a próxima revisão para o assunto não "pular" a prova:
+    metade dos dias que faltam, contando da última prática. Assim os
+    intervalos encolhem conforme a prova chega (60 dias antes -> até 30;
+    14 -> 7; 2 -> 1) e todo assunto tem uma revisão perto dela.
+    Sem meta, ou com a prova já passada, não há limite (None).
+    """
+    if not meta:
+        return None
+    faltam = (meta - ultima).days
+    if faltam <= 0:
+        return None
+    return max(1, faltam // 2)
+
+
+def margem_de_revisao(faltam: int) -> int:
+    """Dias antes da prova reservados só para revisão: 1/5 do tempo, entre 7 e 60."""
+    return min(MARGEM_MAX, max(MARGEM_MIN, faltam // 5))
+
+
+def plano_da_meta(hoje: date, meta: date, nao_iniciados: int, iniciados_semana: int) -> dict:
+    """
+    Ritmo para começar todo o conteúdo a tempo de revisar antes da prova.
+
+    - fim_conteudo: data até a qual todos os assuntos devem ter sido começados
+      (a prova menos a margem de revisão);
+    - por_semana: assuntos novos por semana para chegar lá;
+    - status: 'passou' (a prova já foi), 'concluido' (tudo começado),
+      'atrasado' (o prazo do conteúdo passou e ainda falta assunto),
+      'abaixo' (nos últimos 7 dias começou menos que o ritmo pede) ou 'em_dia'.
+    """
+    faltam = (meta - hoje).days
+    fim = meta - timedelta(days=margem_de_revisao(max(0, faltam)))
+    dias_conteudo = (fim - hoje).days
+    if nao_iniciados <= 0:
+        por_semana = 0
+    elif dias_conteudo <= 0:
+        por_semana = nao_iniciados
+    else:
+        por_semana = ceil(nao_iniciados * 7 / dias_conteudo)
+    if faltam < 0:
+        status = "passou"
+    elif nao_iniciados <= 0:
+        status = "concluido"
+    elif dias_conteudo <= 0:
+        status = "atrasado"
+    elif iniciados_semana < por_semana:
+        status = "abaixo"
+    else:
+        status = "em_dia"
+    return {
+        "meta": meta, "faltam": faltam, "fim_conteudo": fim, "por_semana": por_semana,
+        "nao_iniciados": nao_iniciados, "iniciados_semana": iniciados_semana,
+        "status": status, "reta_final": 0 <= faltam <= RETA_FINAL,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -514,3 +622,46 @@ def classificar_para_mapa(estado: EstadoAssunto, hoje: date) -> str:
     if estado.dominio_efetivo + EPS >= LIMIAR_BOM:
         return "dominado"
     return "esperar"
+
+
+# ---------------------------------------------------------------------------
+# Flashcards
+# ---------------------------------------------------------------------------
+# Cada cartão segue a MESMA lógica dos assuntos: cada resposta conta como uma
+# prática com uma % de acerto, e o intervalo sai da tabela pelo domínio, com
+# fase de aprendizado, bônus, ritmo, máximo de dias e data da prova.
+
+NOTAS_CARTAO = ("errei", "demorei", "acertei")
+PONTOS_CARTAO = {"errei": 0.0, "demorei": 0.75, "acertei": 1.0}
+NOVOS_POR_DIA = 20          # cartões novos apresentados por dia (todos os baralhos)
+
+
+def agenda_cartao(
+    respostas: list[tuple[date, str]],
+    fator: float = 1.0,
+    tetos: tuple[int, ...] = TETOS_APRENDIZADO,
+    teto: int | None = None,
+    meta: date | None = None,
+) -> tuple[date, int] | None:
+    """
+    Próxima revisão do cartão e o intervalo, a partir das respostas
+    [(data, 'errei' | 'demorei' | 'acertei'), ...]. None = cartão novo.
+      errei   = 0%   (volta logo: 1 dia na fase de aprendizado, 3 dias depois)
+      demorei = 75%  (acertou, mas foi difícil lembrar)
+      acertei = 100%
+    """
+    if not respostas:
+        return None
+    # Como no Anki: errou, o cartão volta na mesma sessão até você acertar.
+    # Para a agenda vale só a PRIMEIRA resposta de cada dia; as outras do mesmo
+    # dia são os passos de reaprendizado.
+    respostas = sorted(respostas, key=lambda r: r[0])
+    vistos: set[date] = set()
+    respostas = [r for r in respostas if not (r[0] in vistos or vistos.add(r[0]))]
+    pcts = [PONTOS_CARTAO[n] for _, n in respostas]
+    intervalo, _ = calcular_intervalo(pcts, None, None, tetos=tetos, fator=fator, teto=teto)
+    ultima = respostas[-1][0]
+    limite = limite_pela_meta(ultima, meta)
+    if limite:
+        intervalo = min(intervalo, limite)
+    return ultima + timedelta(days=intervalo), intervalo

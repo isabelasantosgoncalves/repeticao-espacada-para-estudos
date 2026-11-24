@@ -92,6 +92,8 @@
         form.querySelector('input[name="dias_fixos"]').reportValidity();
         return;
       }
+      var invalido = passos[atual].querySelector('input:invalid');
+      if (invalido) { invalido.reportValidity(); return; }
       atual = proximo(atual, 1);
       mostrar();
     });
@@ -113,7 +115,120 @@
     mostrar();
   };
 
-  // Configurações: mostra só as seções que valem para o modo.
+  // Data da prova: mostra o campo de mês ou de dia conforme a opção escolhida
+  // (e, no onboarding, o nome da prova quando há prova).
+  Revisa.metas = function (raiz) {
+    if (!raiz) return;
+    Array.prototype.forEach.call(raiz.querySelectorAll('[data-meta]'), function (bloco) {
+      var nome = bloco.parentNode.querySelector('[data-prova-nome]');
+      function atualizar() {
+        var r = bloco.querySelector('input[type="radio"]:checked');
+        var tipo = r ? r.value : '';
+        Array.prototype.forEach.call(bloco.querySelectorAll('[data-meta-se]'), function (l) {
+          var ativo = l.getAttribute('data-meta-se') === tipo;
+          l.hidden = !ativo;
+          l.querySelector('input').required = ativo;
+        });
+        if (nome) {
+          nome.hidden = tipo === 'sem' || !tipo;
+          nome.querySelector('input').required = !nome.hidden;
+        }
+      }
+      bloco.addEventListener('change', atualizar);
+      atualizar();
+    });
+  };
+
+  // Estudo de flashcards, como no Anki: espaço (ou Enter) vira o cartão;
+  // 1 a 3 respondem; Ctrl+Z desfaz a última resposta. Nada disso vale
+  // enquanto você digita (ex.: editando o cartão).
+  function digitando(ev) {
+    var t = ev.target;
+    return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+  }
+  Revisa.estudo = function (raiz) {
+    var desfazer = document.querySelector('[data-desfazer]');
+    var enviado = false;
+    document.addEventListener('keydown', function (ev) {
+      if (enviado || digitando(ev)) return;
+      if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'z' || ev.key === 'Z') && desfazer) {
+        ev.preventDefault();
+        enviado = true;
+        desfazer.submit();
+      }
+    });
+    if (!raiz) return;
+    var verso = raiz.querySelector('[data-verso]');
+    var botao = raiz.querySelector('[data-virar]');
+    var notas = raiz.querySelector('[data-notas]');
+    function virar() {
+      verso.hidden = false;
+      botao.hidden = true;
+      notas.hidden = false;
+    }
+    botao.addEventListener('click', virar);
+    notas.addEventListener('submit', function () { enviado = true; });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.ctrlKey || ev.metaKey || ev.altKey || enviado || digitando(ev)) return;
+      if (notas.hidden && (ev.key === ' ' || ev.key === 'Enter')) {
+        ev.preventDefault();
+        virar();
+        return;
+      }
+      if (!notas.hidden && /^[1-3]$/.test(ev.key)) {
+        var b = notas.querySelectorAll('button[name="nota"]')[Number(ev.key) - 1];
+        if (b) { enviado = true; b.click(); }
+      }
+    });
+  };
+
+  // Fórmulas dos flashcards (KaTeX): $$ ... $$ (em destaque) ou \( ... \) (no meio do texto).
+  Revisa.formulas = function () {
+    if (!window.renderMathInElement) return;
+    document.querySelectorAll('.fc-texto').forEach(function (el) {
+      window.renderMathInElement(el, {
+        delimiters: [{ left: '$$', right: '$$', display: true }, { left: '\\(', right: '\\)', display: false }],
+        throwOnError: false
+      });
+    });
+  };
+
+  // Colar uma imagem (Ctrl+V) no texto do cartão: ela vai para o campo de imagem daquele lado.
+  document.addEventListener('paste', function (ev) {
+    var area = ev.target.closest && ev.target.closest('[data-colar]');
+    if (!area || !ev.clipboardData) return;
+    var arquivo = null;
+    Array.prototype.forEach.call(ev.clipboardData.items || [], function (it) {
+      if (!arquivo && it.kind === 'file' && /^image\//.test(it.type)) arquivo = it.getAsFile();
+    });
+    if (!arquivo) return;
+    var campo = area.form.querySelector('input[name="' + area.getAttribute('data-colar') + '"]');
+    if (!campo || typeof DataTransfer === 'undefined') return;
+    ev.preventDefault();
+    var dt = new DataTransfer();
+    dt.items.add(new File([arquivo], 'imagem-colada.' + (arquivo.type.split('/')[1] || 'png'), { type: arquivo.type }));
+    campo.files = dt.files;
+    campo.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  // Mostra o nome da imagem escolhida/colada ao lado do campo.
+  document.addEventListener('change', function (ev) {
+    if (!ev.target.matches || !ev.target.matches('[data-imagem]')) return;
+    var rotulo = ev.target.closest('label');
+    var aviso = rotulo.querySelector('.fc-arquivo-nome') || rotulo.appendChild(document.createElement('small'));
+    aviso.className = 'fc-arquivo-nome';
+    aviso.textContent = ev.target.files.length ? '✓ ' + ev.target.files[0].name : '';
+  });
+
+  // Busca nos cartões de um baralho (filtra a lista enquanto você digita).
+  document.addEventListener('input', function (ev) {
+    if (!ev.target.matches || !ev.target.matches('[data-busca-cartoes]')) return;
+    var q = ev.target.value.trim().toLowerCase();
+    document.querySelectorAll('.fc-cartoes > li').forEach(function (li) {
+      li.hidden = q && li.getAttribute('data-texto').indexOf(q) === -1;
+    });
+  });
+
+  // Configurações: mostra só os blocos que valem para o modo.
   Revisa.config = function (form) {
     if (!form) return;
     function atualizar() {
@@ -228,7 +343,7 @@
     atualizar();
   };
 
-  // Registrar prática: seção -> assunto.
+  // Registrar prática: matéria -> assunto.
   Revisa.seletorAssunto = function () {
     var selM = document.getElementById('sel-materia');
     var selA = document.getElementById('sel-assunto');
@@ -243,7 +358,7 @@
       var lista = assuntos.filter(function (a) { return a.materia_id === mid; });
       var vazio = document.createElement('option');
       vazio.value = '';
-      vazio.textContent = isNaN(mid) ? 'Escolha a seção primeiro' : 'Escolha o assunto…';
+      vazio.textContent = isNaN(mid) ? 'Escolha a matéria primeiro' : 'Escolha o assunto…';
       selA.appendChild(vazio);
       lista.forEach(function (a) {
         var o = document.createElement('option');
@@ -317,9 +432,10 @@
     try { history.replaceState(null, '', link.getAttribute('href')); } catch (e) {}
   });
 
-  // Seção: os dias só aparecem quando a frequência é "Só em alguns dias".
+  // Matéria: os dias só aparecem quando a frequência é "Só em alguns dias".
   function ligarFrequencia(form) {
     var dias = form.querySelector('[data-dias-secao]');
+    if (!dias) return;   // sem "cada matéria tem seus dias", o campo nem aparece
     function atualizar() {
       var r = form.querySelector('input[name="frequencia"]:checked');
       dias.hidden = !(r && r.value === 'dias');

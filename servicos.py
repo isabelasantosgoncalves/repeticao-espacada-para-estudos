@@ -35,17 +35,112 @@ def ler_dias(texto: str | None) -> list[int]:
 
 
 def usa_dias_por_secao(cfg: dict) -> bool:
-    """Os dias de cada seção só valem se a pessoa escolheu "cada seção tem seus dias"."""
+    """Os dias de cada matéria só valem se a pessoa escolheu "cada matéria tem seus dias"."""
     return cfg.get("distribuicao") == "dias"
 
 
 def dias_por_assunto(db, uid: int, cfg: dict | None = None) -> dict[int, list[int]]:
-    """Dias de estudo da seção de cada assunto ([] = todo dia)."""
+    """Dias de estudo da matéria de cada assunto ([] = todo dia)."""
     if cfg is not None and not usa_dias_por_secao(cfg):
         return {}
     return {r["id"]: ler_dias(r["dias_estudo"]) for r in db.execute(
         """SELECT a.id, m.dias_estudo FROM assuntos a JOIN materias m ON m.id = a.materia_id
            WHERE a.usuario_id = ?""", (uid,))}
+
+
+# ---------------------------------------------------------------------------
+# Data da prova (meta): fica na SEÇÃO (ex.: ENEM) e vale para todas as matérias
+# dela. Pode ser exata (AAAA-MM-DD) ou só o mês (AAAA-MM); com só o mês, os
+# cálculos usam o dia 1º, para nenhuma revisão passar da prova.
+# ---------------------------------------------------------------------------
+
+MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
+
+
+def normalizar_meta(texto) -> str | None:
+    """'2027-11-07' ou '2027-11' -> o mesmo texto; vazio ou inválido -> None."""
+    texto = str(texto or "").strip()
+    try:
+        if len(texto) == 7:
+            date.fromisoformat(texto + "-01")
+            return texto
+        if len(texto) == 10:
+            return date.fromisoformat(texto).isoformat()
+    except ValueError:
+        pass
+    return None
+
+
+def ler_meta(texto: str | None) -> date | None:
+    """Data usada nos cálculos: a exata, ou o dia 1º se for só o mês."""
+    texto = normalizar_meta(texto)
+    if not texto:
+        return None
+    return date.fromisoformat(texto + "-01" if len(texto) == 7 else texto)
+
+
+def meta_aproximada(texto: str | None) -> bool:
+    return bool(normalizar_meta(texto)) and len(str(texto).strip()) == 7
+
+
+def meta_txt(texto: str | None) -> str:
+    """'2027-11' -> 'nov/2027'; '2027-11-07' -> '07/11/2027'."""
+    t = normalizar_meta(texto)
+    if not t:
+        return ""
+    if len(t) == 7:
+        return f"{MESES[int(t[5:7]) - 1]}/{t[:4]}"
+    return f"{t[8:10]}/{t[5:7]}/{t[:4]}"
+
+
+def ler_campo_meta(form, prefixo: str) -> str | None:
+    """
+    Campos de prova de um formulário: `<prefixo>_tipo` (sem, mes ou dia) e
+    `<prefixo>_mes` / `<prefixo>_dia`. Devolve a data a gravar ou None.
+    """
+    tipo = form.get(f"{prefixo}_tipo")
+    if tipo == "mes":
+        valor = normalizar_meta(form.get(f"{prefixo}_mes"))
+        if not valor or len(valor) != 7:
+            raise ValueError("Escolha o mês da prova.")
+        return valor
+    if tipo == "dia":
+        valor = normalizar_meta(form.get(f"{prefixo}_dia"))
+        if not valor or len(valor) != 10:
+            raise ValueError("Escolha o dia da prova.")
+        return valor
+    return None
+
+
+def metas_por_materia(db, uid: int) -> dict[int, date]:
+    """Data da prova de cada matéria (a da seção dela), só as que têm prova."""
+    res = {}
+    for r in db.execute(
+            """SELECT m.id, s.data_meta FROM materias m JOIN secoes s ON s.id = m.secao_id
+               WHERE m.usuario_id = ?""", (uid,)):
+        meta = ler_meta(r["data_meta"])
+        if meta:
+            res[r["id"]] = meta
+    return res
+
+
+def metas_por_assunto(db, uid: int) -> dict[int, date]:
+    """Data da prova que vale para cada assunto."""
+    por_materia = metas_por_materia(db, uid)
+    return {r["id"]: por_materia[r["materia_id"]] for r in db.execute(
+        "SELECT id, materia_id FROM assuntos WHERE usuario_id = ?", (uid,)) if r["materia_id"] in por_materia}
+
+
+def listar_secoes(db, uid: int) -> list[dict]:
+    """Seções do usuário (com a prova já formatada), em ordem alfabética."""
+    res = []
+    for r in db.execute("SELECT id, nome, data_meta FROM secoes WHERE usuario_id = ?", (uid,)):
+        sec = dict(r)
+        sec["meta"] = ler_meta(sec["data_meta"])
+        sec["meta_txt"] = meta_txt(sec["data_meta"])
+        sec["aproximada"] = meta_aproximada(sec["data_meta"])
+        res.append(sec)
+    return sorted(res, key=lambda x: chave_ordem(x["nome"]))
 
 
 # ---------------------------------------------------------------------------
@@ -160,13 +255,13 @@ def ler_ciclo(db, uid: int) -> list[dict]:
 
 
 def vez_do_ciclo(db, uid: int, dia: date, cfg: dict) -> list[dict]:
-    """Seções da vez no dia (com `feito` = já estudada nesse dia)."""
+    """Matérias da vez no dia (com `feito` = já estudada nesse dia)."""
     vez = L.secoes_da_vez(ler_ciclo(db, uid), cfg.get("secoes_por_dia", 2), dia)
     return [dict(it, feito=it["ultimo_dia"] == dia) for it in vez]
 
 
 def marcar_ciclo(db, uid: int, materia_id: int, dia: date, cfg: dict):
-    """Registrou prática numa seção da vez: aquele item do ciclo conta como feito."""
+    """Registrou prática numa matéria da vez: aquele item do ciclo conta como feito."""
     if not usa_ciclo(cfg):
         return
     for it in vez_do_ciclo(db, uid, dia, cfg):
@@ -181,6 +276,7 @@ def estados(db, uid: int, dia: date, cfg: dict, antes_de: date | None = None,
     """Estado de cada assunto que já tem sessões (só os de `ids`, se informado)."""
     fixas = questoes_fixas(cfg)
     dias = dias_por_assunto(db, uid, cfg)
+    metas = metas_por_assunto(db, uid)
     folga = 0
     if usa_ciclo(cfg):
         n_itens = db.execute("SELECT COUNT(*) FROM ciclo_itens WHERE usuario_id = ?", (uid,)).fetchone()[0]
@@ -190,7 +286,8 @@ def estados(db, uid: int, dia: date, cfg: dict, antes_de: date | None = None,
         if ids is not None and aid not in ids:
             continue
         e = L.analisar_assunto(aid, sess, dia, fixas, fator=fator(cfg), tetos=tetos(cfg),
-                               teto=cfg.get("teto_dias"), dias_estudo=dias.get(aid), folga=folga)
+                               teto=cfg.get("teto_dias"), dias_estudo=dias.get(aid), folga=folga,
+                               meta=metas.get(aid))
         if e:
             res[aid] = e
     return res
@@ -210,14 +307,14 @@ def selecao_do_dia(db, uid: int, dia: date, cfg: dict, assuntos: dict) -> dict:
     tipo = L.tipo_de_revisao(cfg["modo"], cfg["dias_fixos"], dia)
     proximo_fixo = L.proximo_dia_fixo(dia, cfg["dias_fixos"])
 
-    # Seções que não são estudadas no dia ficam fora da revisão
-    # (só quando a pessoa usa "cada seção tem seus dias").
+    # Matérias que não são estudadas no dia ficam fora da revisão
+    # (só quando a pessoa usa "cada matéria tem seus dias").
     if not usa_dias_por_secao(cfg):
         assuntos = {aid: dict(a, dias_materia=[]) for aid, a in assuntos.items()}
     pausadas = {a["materia"] for a in assuntos.values() if not L.estuda_no_dia(dia, a["dias_materia"])}
     est = {aid: e for aid, e in est.items() if L.estuda_no_dia(dia, assuntos[aid]["dias_materia"])}
 
-    # Ciclo de estudos: só as seções da vez entram na revisão do dia.
+    # Ciclo de estudos: só as matérias da vez entram na revisão do dia.
     vez = vez_do_ciclo(db, uid, dia, cfg) if usa_ciclo(cfg) else []
     if vez:
         da_vez = {it["materia_id"] for it in vez}
@@ -233,8 +330,38 @@ def selecao_do_dia(db, uid: int, dia: date, cfg: dict, assuntos: dict) -> dict:
     else:
         selecao = []
 
-    return {"tipo": tipo, "proximo_fixo": proximo_fixo, "selecao": [e for e in selecao if e.assunto_id in assuntos],
-            "pausadas": pausadas, "vez": vez}
+    # Atrasou? Revisões vencidas que ficaram fora do limite podem ser puxadas
+    # para o dia ("fazer mais hoje"). Só existem quando há atraso acumulado.
+    puxados = {r[0] for r in db.execute(
+        "SELECT assunto_id FROM estudo_do_dia WHERE usuario_id = ? AND data = ?", (uid, dia.isoformat()))}
+    na_lista = {e.assunto_id for e in selecao}
+    fora = L.ordenar_por_prioridade([e for aid, e in est.items()
+                                     if e.proxima_revisao <= dia and aid not in na_lista and aid in assuntos])
+    extras = [e for e in fora if e.assunto_id in puxados]
+    restantes = [e for e in fora if e.assunto_id not in puxados]
+
+    return {"tipo": tipo, "proximo_fixo": proximo_fixo,
+            "selecao": [e for e in selecao if e.assunto_id in assuntos] + extras,
+            "pausadas": pausadas, "vez": vez,
+            "puxados": {e.assunto_id for e in extras}, "restantes": restantes}
+
+
+def puxar_revisoes(db, uid: int, dia: date, quantos: int | None) -> int:
+    """
+    Coloca na lista do dia as próximas revisões vencidas que ficaram de fora
+    (as de maior prioridade primeiro). `quantos` None = todas. Devolve quantas entraram.
+    """
+    cfg = carregar_config(db, uid)
+    assuntos = {a["id"]: a for a in listar_folhas(db, uid)}
+    feitos = {r[0] for r in db.execute(
+        "SELECT DISTINCT assunto_id FROM sessoes WHERE usuario_id = ? AND data = ?", (uid, dia.isoformat()))}
+    restantes = [e for e in selecao_do_dia(db, uid, dia, cfg, assuntos)["restantes"] if e.assunto_id not in feitos]
+    escolhidos = restantes if quantos is None else restantes[:max(0, quantos)]
+    for e in escolhidos:
+        db.execute("INSERT OR IGNORE INTO estudo_do_dia (usuario_id, assunto_id, data) VALUES (?, ?, ?)",
+                   (uid, e.assunto_id, dia.isoformat()))
+    db.commit()
+    return len(escolhidos)
 
 
 def montar_hoje(db, uid: int, dia: date) -> dict:
@@ -250,6 +377,7 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     sel = selecao_do_dia(db, uid, dia, cfg, assuntos)
     tipo, proximo_fixo, selecao = sel["tipo"], sel["proximo_fixo"], sel["selecao"]
     pausadas, vez = sel["pausadas"], sel["vez"]
+    puxados, restantes = sel["puxados"], sel["restantes"]
 
     # Prévia de amanhã: mesmas regras, já contando as práticas de hoje.
     amanha_dia = dia + timedelta(days=1)
@@ -274,7 +402,7 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     for e in selecao:
         if e.assunto_id in assuntos:
             revisao.append({"assunto": assuntos[e.assunto_id], "estado": e,
-                            "feito": feitas_hoje.get(e.assunto_id)})
+                            "feito": feitas_hoje.get(e.assunto_id), "extra": e.assunto_id in puxados})
 
     # ---- Painel: números do dia, próximos dias e progresso no conteúdo ----
     # Estado ATUAL (inclui as sessões de hoje) para atrasos, domínio e agenda.
@@ -287,6 +415,8 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     com_sessao = {r["assunto_id"] for r in db.execute(
         "SELECT DISTINCT assunto_id FROM sessoes WHERE usuario_id = ?", (uid,))}
     nao_estudados = [a for a in assuntos.values() if a["id"] not in com_sessao]
+
+    metas = montar_metas(db, uid, dia, assuntos)
 
     # Sessões de hoje em assuntos que não estavam na revisão (ex.: assunto novo)
     na_revisao = {item["assunto"]["id"] for item in revisao}
@@ -312,13 +442,46 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
         "pausadas": sorted(pausadas, key=chave_ordem),
         "vez": vez,
         "amanha": amanha,
+        "metas": metas,
+        "flashcards": _cartoes().resumo_hoje(db, uid, dia),
+        # vencidas fora da lista e ainda não feitas hoje
+        "n_restantes": sum(1 for e in restantes if e.assunto_id not in feitas_hoje),
     }
+
+
+def montar_metas(db, uid: int, dia: date, assuntos: dict | None = None) -> list[dict]:
+    """
+    Seções com data de prova: contagem regressiva e ritmo de assuntos novos
+    (ver logica.plano_da_meta). Ordenadas pela prova mais próxima.
+    """
+    if assuntos is None:
+        assuntos = {a["id"]: a for a in listar_folhas(db, uid)}
+    # data da 1ª prática de cada assunto
+    primeira = {r["assunto_id"]: para_data(r["d"]) for r in db.execute(
+        "SELECT assunto_id, MIN(data) AS d FROM sessoes WHERE usuario_id = ? GROUP BY assunto_id", (uid,))}
+    inicio_semana = dia - timedelta(days=6)
+    materia_secao = {r["id"]: r["secao_id"] for r in db.execute(
+        "SELECT id, secao_id FROM materias WHERE usuario_id = ?", (uid,))}
+    res = []
+    for sec in listar_secoes(db, uid):
+        meta, texto = sec["meta"], sec["data_meta"]
+        if not meta:
+            continue
+        folhas = [a for a in assuntos.values() if materia_secao.get(a["materia_id"]) == sec["id"]]
+        nao = sum(1 for a in folhas if a["id"] not in primeira)
+        semana = sum(1 for a in folhas if a["id"] in primeira and inicio_semana <= primeira[a["id"]] <= dia)
+        plano = L.plano_da_meta(dia, meta, nao, semana)
+        plano.update({"secao_id": sec["id"], "nome": sec["nome"], "total": len(folhas),
+                      "meta_txt": meta_txt(texto), "aproximada": meta_aproximada(texto)})
+        res.append(plano)
+    res.sort(key=lambda p: (p["faltam"] < 0, p["meta"]))
+    return res
 
 
 def planejar_revisoes(db, uid: int, dia: date, n_dias: int = 7, cfg: dict | None = None) -> list[dict]:
     """
     Revisão planejada de cada dia, com as mesmas regras da tela Hoje (modo,
-    limite por seção, dia fixo, dias de cada seção e ciclo de estudos).
+    limite por matéria, dia fixo, dias de cada matéria e ciclo de estudos).
 
     Supõe que a pessoa faz a revisão de cada dia: o que entra num dia sai da
     fila; o que não cabe no limite continua vencido e passa para o dia
@@ -341,7 +504,7 @@ def planejar_revisoes(db, uid: int, dia: date, n_dias: int = 7, cfg: dict | None
     fila = {aid: e for aid, e in atual.items()
             if not (aid in {x.assunto_id for x in sel_hoje} and aid not in feitas_hoje)}
 
-    # Ciclo: simula a fila de seções andando um passo por dia.
+    # Ciclo: simula a fila de matérias andando um passo por dia.
     ciclo = [dict(it) for it in ler_ciclo(db, uid)] if usa_ciclo(cfg) else []
     k = cfg.get("secoes_por_dia", 2)
     if ciclo:
@@ -387,7 +550,7 @@ def montar_vencimentos(db, uid: int, dia: date, n_dias: int = 7) -> dict:
 
 def montar_mapa(db, uid: int, dia: date) -> dict:
     """
-    Mapa de domínio numa lista só: assuntos já estudados agrupados por seção,
+    Mapa de domínio numa lista só: assuntos já estudados agrupados por matéria,
     cada um com seu status (agora / esperar / dominado). Os contadores do topo
     servem de filtro. Assuntos ainda não estudados ficam só na tela Hoje.
     """
@@ -422,7 +585,8 @@ def exportar(db, uid: int) -> dict:
             """SELECT data, acertos, total, observacao FROM sessoes
                WHERE usuario_id = ? AND assunto_id = ? ORDER BY data, id""", (uid, aid))]
 
-    for m in db.execute("SELECT id, nome, dias_estudo FROM materias WHERE usuario_id = ? ORDER BY id", (uid,)):
+    for m in db.execute("""SELECT m.id, m.nome, m.dias_estudo, s.nome AS secao FROM materias m
+                            LEFT JOIN secoes s ON s.id = m.secao_id WHERE m.usuario_id = ? ORDER BY m.id""", (uid,)):
         assuntos = []
         for a in db.execute(
                 """SELECT id, nome FROM assuntos
@@ -435,7 +599,14 @@ def exportar(db, uid: int) -> dict:
             if subs:
                 item["subassuntos"] = subs
             assuntos.append(item)
-        materias.append({"nome": m["nome"], "dias_estudo": ler_dias(m["dias_estudo"]), "assuntos": assuntos})
+        item_m = {"nome": m["nome"], "dias_estudo": ler_dias(m["dias_estudo"]), "assuntos": assuntos}
+        import cartoes as C
+        baralhos = C.exportar_baralhos(db, uid, m["id"])
+        if baralhos:
+            item_m["baralhos"] = baralhos
+        if m["secao"]:
+            item_m["secao"] = m["secao"]
+        materias.append(item_m)
     return {
         "app": "revisa",
         "versao": 1,
@@ -452,6 +623,8 @@ def exportar(db, uid: int) -> dict:
             "distribuicao": cfg["distribuicao"],
             "secoes_por_dia": cfg["secoes_por_dia"],
         },
+        "secoes": [{"nome": x["nome"], **({"data_meta": x["data_meta"]} if normalizar_meta(x["data_meta"]) else {})}
+                   for x in listar_secoes(db, uid)],
         "ciclo": [it["nome"] for it in ler_ciclo(db, uid)],
         "materias": materias,
     }
@@ -486,7 +659,7 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
     for m in dados["materias"]:
         nome_m = str(m.get("nome", "")).strip()[:120]
         if not nome_m:
-            raise ErroImportacao("Seção sem nome no arquivo.")
+            raise ErroImportacao("Matéria sem nome no arquivo.")
         assuntos = []
         for a in m.get("assuntos", []) or []:
             nome_a = str(a.get("nome", "")).strip()[:160]
@@ -500,7 +673,19 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
                 subs.append((nome_s, [_validar_sessao(x) for x in s.get("sessoes", []) or []]))
             assuntos.append((nome_a, [_validar_sessao(s) for s in a.get("sessoes", []) or []], subs))
         dias_m = ",".join(map(str, ler_dias(",".join(map(str, m.get("dias_estudo") or [])))))
-        plano.append((nome_m, assuntos, dias_m))
+        secao_m = str(m.get("secao") or "").strip()[:120] or None
+        import cartoes as C
+        plano.append((nome_m, assuntos, dias_m, secao_m, C.validar_baralhos(m.get("baralhos"))))
+
+    secoes_novas = []
+    for x in dados.get("secoes") or []:
+        nome_x = str((x or {}).get("nome", "")).strip()[:120]
+        if nome_x:
+            secoes_novas.append((nome_x, normalizar_meta(x.get("data_meta"))))
+    # seção citada por uma matéria e ausente da lista: cria sem prova
+    for *_, secao_m, _b in plano:
+        if secao_m and secao_m not in {n for n, _ in secoes_novas}:
+            secoes_novas.append((secao_m, None))
 
     cfg_nova = dados.get("configuracoes") or {}
 
@@ -510,10 +695,18 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
             db.execute("DELETE FROM sessoes WHERE usuario_id = ?", (uid,))
             db.execute("DELETE FROM assuntos WHERE usuario_id = ?", (uid,))
             db.execute("DELETE FROM materias WHERE usuario_id = ?", (uid,))
+            db.execute("DELETE FROM secoes WHERE usuario_id = ?", (uid,))
+            db.execute("DELETE FROM imagens WHERE usuario_id = ?", (uid,))
+        ids_secao = {}
+        for nome_x, meta_x in secoes_novas:
+            ids_secao[nome_x] = db.execute("INSERT INTO secoes (usuario_id, nome, data_meta) VALUES (?, ?, ?)",
+                                           (uid, nome_x, meta_x)).lastrowid
         n_m = n_a = n_s = 0
-        for nome_m, assuntos, dias_m in plano:
-            mid = db.execute("INSERT INTO materias (usuario_id, nome, dias_estudo) VALUES (?, ?, ?)",
-                             (uid, nome_m, dias_m)).lastrowid
+        import cartoes as C
+        n_c = 0
+        for nome_m, assuntos, dias_m, secao_m, baralhos in plano:
+            mid = db.execute("INSERT INTO materias (usuario_id, nome, dias_estudo, secao_id) VALUES (?, ?, ?, ?)",
+                             (uid, nome_m, dias_m, ids_secao.get(secao_m))).lastrowid
             n_m += 1
             def gravar(nome, sessoes, pai=None):
                 nonlocal n_a, n_s
@@ -532,9 +725,10 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
                 aid = gravar(nome_a, sessoes)
                 for nome_s, sessoes_s in subs:
                     gravar(nome_s, sessoes_s, aid)
+            n_c += C.gravar_baralhos(db, uid, mid, baralhos)
         if cfg_nova:
             salvar_config(db, uid, cfg_nova, commit=False)
-        # ciclo de estudos (pelos nomes das seções importadas)
+        # ciclo de estudos (pelos nomes das matérias importadas)
         if isinstance(dados.get("ciclo"), list):
             db.execute("DELETE FROM ciclo_itens WHERE usuario_id = ?", (uid,))
             ids = {r["nome"]: r["id"] for r in db.execute("SELECT id, nome FROM materias WHERE usuario_id = ?", (uid,))}
@@ -546,7 +740,7 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
     except Exception:
         db.rollback()
         raise
-    return {"materias": n_m, "assuntos": n_a, "sessoes": n_s}
+    return {"materias": n_m, "assuntos": n_a, "sessoes": n_s, "cartoes": n_c}
 
 
 def validar_config(form: dict) -> dict:
@@ -581,10 +775,10 @@ def validar_config(form: dict) -> dict:
         raise ValueError(f"O máximo de dias sem revisão deve ficar entre {L.TETO_MIN} e {L.TETO_MAX}.")
     distribuicao = form.get("distribuicao") or "todas"
     if distribuicao not in ("todas", "dias", "ciclo"):
-        raise ValueError("Escolha como você distribui as seções na semana.")
+        raise ValueError("Escolha como você distribui as matérias na semana.")
     por_dia = int(form.get("secoes_por_dia") or 2)
     if not 1 <= por_dia <= 10:
-        raise ValueError("O ciclo deve ter de 1 a 10 seções por dia.")
+        raise ValueError("O ciclo deve ter de 1 a 10 matérias por dia.")
     return {"modo": modo, "dias_fixos": dias, "revisao_minima": minima,
             "questoes_modo": qmodo, "questoes_fixas": qfixas, "ritmo": ritmo,
             "aprendizado": aprendizado, "teto_dias": teto, "distribuicao": distribuicao,
@@ -603,3 +797,9 @@ def salvar_config(db, uid: int, dados: dict, commit: bool = True):
          c["distribuicao"], c["secoes_por_dia"], uid))
     if commit:
         db.commit()
+
+
+def _cartoes():
+    """Módulo dos flashcards (importado aqui dentro: ele também importa este módulo)."""
+    import cartoes
+    return cartoes

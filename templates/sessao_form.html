@@ -16,7 +16,7 @@
   <form method="post" class="form" data-validar-resultados>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="grade-2">
-      <label>Seção
+      <label>Matéria
         <select id="sel-materia" required>
           <option value="">Escolha…</option>
           {% for m in materias if m.folhas %}
@@ -26,7 +26,7 @@
       </label>
       <label>Assunto
         <select name="assunto_id" id="sel-assunto" required data-valor="{{ v.assunto_id or '' }}">
-          <option value="">Escolha a seção primeiro</option>
+          <option value="">Escolha a matéria primeiro</option>
         </select>
       </label>
     </div>
