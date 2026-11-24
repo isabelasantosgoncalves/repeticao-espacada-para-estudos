@@ -921,3 +921,12 @@ kbd { font-family: var(--mono); font-size: .7rem; padding: 1px 5px; border-radiu
   background: var(--acento); color: #fff; font-size: .86rem; box-shadow: 0 6px 18px rgba(20, 30, 24, .2); opacity: 0; transition: opacity .2s; pointer-events: none; }
 .ord-salvo.mostra { opacity: 1; }
 .ord-salvo.erro { background: var(--vermelho); }
+
+/* ---------- subassuntos recolhíveis (tela Seções) ---------- */
+.ac-sub-toggle { list-style: none; display: flex; align-items: center; gap: 6px; padding: 8px 0 2px; cursor: pointer;
+  font-size: .82rem; color: var(--acento); user-select: none; }
+.ac-sub-toggle::-webkit-details-marker { display: none; }
+.ac-sub-toggle:hover { text-decoration: underline; }
+.ac-seta { display: inline-block; font-size: .7rem; transition: transform .15s; }
+.ac-sub-d[open] > .ac-sub-toggle .ac-seta { transform: rotate(90deg); }
+.ac-sub-d[open] > .ac-sub-toggle { padding-bottom: 6px; }

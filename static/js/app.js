@@ -450,6 +450,38 @@
     });
   };
 
+  // Subassuntos recolhíveis: fechados por padrão; o navegador lembra quais
+  // ficaram abertos (só neste aparelho). No modo de edição abrem todos.
+  var CHAVE_SUBS = 'revisa-subassuntos-abertos';
+  var mexendoNosSubs = false;
+  function subsAbertos() {
+    try { return JSON.parse(localStorage.getItem(CHAVE_SUBS) || '[]'); } catch (e) { return []; }
+  }
+  function guardarSubs(lista) {
+    try { localStorage.setItem(CHAVE_SUBS, JSON.stringify(lista)); } catch (e) {}
+  }
+  function subsComoGuardados(raiz) {
+    var abertos = subsAbertos();
+    mexendoNosSubs = true;
+    raiz.querySelectorAll('[data-sub]').forEach(function (d) { d.open = abertos.indexOf(d.getAttribute('data-sub')) !== -1; });
+    mexendoNosSubs = false;
+  }
+  function abrirSubs(raiz) {
+    mexendoNosSubs = true;
+    raiz.querySelectorAll('[data-sub]').forEach(function (d) { d.open = true; });
+    mexendoNosSubs = false;
+  }
+  document.querySelectorAll('[data-sub]').forEach(function (d) {
+    if (!d.closest('[data-bloco].editando')) d.open = subsAbertos().indexOf(d.getAttribute('data-sub')) !== -1;
+    d.addEventListener('toggle', function () {
+      if (mexendoNosSubs || d.closest('[data-bloco].editando')) return;
+      var id = d.getAttribute('data-sub');
+      var lista = subsAbertos().filter(function (x) { return x !== id; });
+      if (d.open) lista.push(id);
+      guardarSubs(lista);
+    });
+  });
+
   // Matérias: botão Editar/Concluir alterna o modo do bloco sem recarregar.
   document.addEventListener('click', function (ev) {
     var link = ev.target.closest('[data-alternar-edicao]');
@@ -458,8 +490,14 @@
     if (!bloco) return;
     ev.preventDefault();
     var editar = !bloco.classList.contains('editando');
-    document.querySelectorAll('[data-bloco].editando').forEach(function (b) { b.classList.remove('editando'); });
-    if (editar) bloco.classList.add('editando');
+    document.querySelectorAll('[data-bloco].editando').forEach(function (b) {
+      b.classList.remove('editando');
+      subsComoGuardados(b);
+    });
+    if (editar) {
+      bloco.classList.add('editando');
+      abrirSubs(bloco);   // editando, os subassuntos ficam à mostra
+    }
     try { history.replaceState(null, '', link.getAttribute('href')); } catch (e) {}
   });
 

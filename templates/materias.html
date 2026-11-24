@@ -14,7 +14,7 @@
 
 {% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
 
-{% macro contagem(a) %}{% if a.filhos %}{{ a.filhos | length }} subassunto{{ 's' if a.filhos | length > 1 }}{% else %}{{ a.n_sessoes }} prática{{ '' if a.n_sessoes == 1 else 's' }}{% endif %}{% endmacro %}
+{% macro contagem(a) %}{% set n = a.filhos | sum(attribute='n_sessoes') if a.filhos else a.n_sessoes %}{{ n }} prática{{ '' if n == 1 else 's' }}{% endmacro %}
 
 {% macro dias_txt(dias) %}{% if not dias %}Todo dia{% else %}{% for d in dias %}{{ NOMES_DIAS[d][:3] }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}{% endmacro %}
 
@@ -110,6 +110,10 @@
       <div class="so-edicao ac-ed">{{ linha_edicao(a, m) }}</div>
 
       {% if a.filhos %}
+      {# subassuntos recolhidos: a setinha abre e fecha (o navegador lembra o que ficou aberto) #}
+      <details class="ac-sub-d" data-sub="{{ a.id }}" {{ 'open' if editando == m.id }}>
+      <summary class="ac-sub-toggle"><span class="ac-seta" aria-hidden="true">▸</span>
+        {{ a.filhos | length }} subassunto{{ 's' if a.filhos | length > 1 }}</summary>
       <ul class="ac-sub">
         {% for f in a.filhos %}
         <li>
@@ -121,6 +125,7 @@
         </li>
         {% endfor %}
       </ul>
+      </details>
       {% elif not a.n_sessoes %}
       <p class="ac-vazio so-normal">Ainda não estudado.</p>
       {% endif %}
