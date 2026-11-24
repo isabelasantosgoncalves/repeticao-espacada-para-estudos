@@ -221,6 +221,12 @@ revisões e no mapa. O domínio do grupo é a **média simples** do domínio efe
 estudados. Cada um pesa igual, para que um ponto fraco (ex.: inequações) não fique escondido atrás
 de um ponto forte (ex.: equações).
 
+**Ordem.** Seções, matérias, assuntos e subassuntos aparecem na ordem escolhida pelo usuário na tela
+**Ordem** (botão na tela Seções): só os nomes, arrastando para cima ou para baixo, e os subassuntos de
+cada assunto num painel que abre. A ordem é salva na hora. Sem escolha, vale a ordem de cadastro.
+Essa ordem vale em todo o app: tela Seções, plano de conteúdo, "Ainda não estudados", Mapa, registrar
+prática, flashcards e exportação.
+
 ### 9. Data da prova (meta)
 
 A data da prova fica na **seção** (ex.: ENEM em novembro de 2027) e vale para todas as matérias dela.

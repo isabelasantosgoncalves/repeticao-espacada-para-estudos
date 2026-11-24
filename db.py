@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS secoes (
     usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
     nome        TEXT    NOT NULL,
     data_meta   TEXT,
-    fim_conteudo TEXT     -- terminar o conteúdo novo até (AAAA-MM-DD); vazio = automático
+    fim_conteudo TEXT,    -- terminar o conteúdo novo até (AAAA-MM-DD); vazio = automático
+    ordem       INTEGER   -- posição escolhida pelo usuário; vazio = ordem de cadastro
 );
 
 -- Matéria (ex.: Matemática, SAT Math), dentro de uma seção (ou solta).
@@ -57,7 +58,8 @@ CREATE TABLE IF NOT EXISTS materias (
     usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
     nome        TEXT    NOT NULL,
     dias_estudo TEXT    NOT NULL DEFAULT '',
-    secao_id    INTEGER REFERENCES secoes(id) ON DELETE SET NULL
+    secao_id    INTEGER REFERENCES secoes(id) ON DELETE SET NULL,
+    ordem       INTEGER   -- posição dentro da seção; vazio = ordem de cadastro
 );
 
 CREATE TABLE IF NOT EXISTS assuntos (
@@ -66,7 +68,8 @@ CREATE TABLE IF NOT EXISTS assuntos (
     materia_id  INTEGER NOT NULL REFERENCES materias(id) ON DELETE CASCADE,
     nome        TEXT    NOT NULL,
     -- Subassunto: aponta para o assunto "pai" (um nível só). NULL = assunto de topo.
-    parent_id   INTEGER REFERENCES assuntos(id) ON DELETE CASCADE
+    parent_id   INTEGER REFERENCES assuntos(id) ON DELETE CASCADE,
+    ordem       INTEGER   -- posição entre os irmãos; vazio = ordem de cadastro
 );
 
 CREATE TABLE IF NOT EXISTS sessoes (
@@ -169,6 +172,10 @@ def iniciar_db(caminho: str):
     # Migração: dias de estudo por seção
     if "dias_estudo" not in [r["name"] for r in con.execute("PRAGMA table_info(materias)")]:
         con.execute("ALTER TABLE materias ADD COLUMN dias_estudo TEXT NOT NULL DEFAULT ''")
+    # Migração: ordem escolhida pelo usuário (seções, matérias e assuntos)
+    for tabela in ("secoes", "materias", "assuntos"):
+        if "ordem" not in [r["name"] for r in con.execute(f"PRAGMA table_info({tabela})")]:
+            con.execute(f"ALTER TABLE {tabela} ADD COLUMN ordem INTEGER")
     # Migração: prazo do conteúdo novo escolhido na seção
     if "fim_conteudo" not in [r["name"] for r in con.execute("PRAGMA table_info(secoes)")]:
         con.execute("ALTER TABLE secoes ADD COLUMN fim_conteudo TEXT")

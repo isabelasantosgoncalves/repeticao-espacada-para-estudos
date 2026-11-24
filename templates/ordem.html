@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block titulo %}Ordem{% endblock %}
+{% block main_class %}conteudo medio{% endblock %}
+
+{# Tela "Ordem": só os nomes, para arrastar. Cada lista é um grupo de irmãos
+   (seções; matérias de uma seção; assuntos de uma matéria; subassuntos de um
+   assunto). Ao soltar, a nova ordem vai para /ordem/salvar. #}
+
+{% macro alca() %}<span class="ord-alca" title="Arraste para mudar a ordem" aria-hidden="true">⋮⋮</span>{% endmacro %}
+
+{% macro lista_assuntos(m) %}
+<ul class="ord-lista" data-ordem="assunto">
+  {% for a in m.assuntos %}
+  <li data-id="{{ a.id }}">
+    <div class="ord-item">{{ alca() }}<span class="ord-nome">{{ a.nome }}</span></div>
+    {% if a.filhos %}
+    <details class="ord-sub-d">
+      <summary>{{ a.filhos | length }} subassunto{{ 's' if a.filhos | length > 1 }}: ordenar</summary>
+      <ul class="ord-lista" data-ordem="assunto">
+        {% for f in a.filhos %}
+        <li data-id="{{ f.id }}"><div class="ord-item">{{ alca() }}<span class="ord-nome">{{ f.nome }}</span></div></li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{% macro bloco_materias(materias) %}
+{% if materias | length > 1 %}
+<span class="ord-rotulo">Matérias</span>
+<ul class="ord-lista" data-ordem="materia">
+  {% for m in materias %}<li data-id="{{ m.id }}"><div class="ord-item">{{ alca() }}<span class="ord-nome">{{ m.nome }}</span></div></li>{% endfor %}
+</ul>
+{% endif %}
+{% for m in materias if m.assuntos %}
+<div class="ord-materia">
+  <h3>{{ m.nome }}</h3>
+  {{ lista_assuntos(m) }}
+</div>
+{% endfor %}
+{% endmacro %}
+
+{% block conteudo %}
+<div class="cab-pagina">
+  <div>
+    <p class="selo"><a href="{{ url_for('materias') }}">Seções</a> · organizar</p>
+    <h1>Ordem</h1>
+  </div>
+  <a class="btn btn-p" href="{{ url_for('materias') }}">Pronto</a>
+</div>
+<p class="sub ord-ajuda">Arraste pelos <b>⋮⋮</b> para mudar a ordem; ela é salva na hora e vale em todo o app
+  (tela Seções, plano de conteúdo, "Ainda não estudados", registrar prática). Para ordenar os subassuntos, abra o assunto.</p>
+
+{% if secoes | length > 1 %}
+<section class="ord-bloco">
+  <span class="ord-rotulo">Seções</span>
+  <ul class="ord-lista" data-ordem="secao">
+    {% for g in secoes %}<li data-id="{{ g.id }}"><div class="ord-item">{{ alca() }}<span class="ord-nome">{{ g.nome }}</span></div></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% for g in secoes if g.materias %}
+<section class="ord-bloco">
+  <h2>{{ g.nome }}</h2>
+  {{ bloco_materias(g.materias) }}
+</section>
+{% endfor %}
+
+{% if soltas %}
+<section class="ord-bloco">
+  <h2>{{ 'Sem seção' if secoes else 'Matérias' }}</h2>
+  {{ bloco_materias(soltas) }}
+</section>
+{% endif %}
+
+<div class="ord-salvo" role="status" aria-live="polite" data-ord-aviso></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<script>Revisa.ordem('{{ csrf_token() }}', '{{ url_for('salvar_ordem') }}');</script>
+{% endblock %}

@@ -228,6 +228,37 @@
     });
   });
 
+  // Tela "Ordem": cada lista vira arrastável (SortableJS). Ao soltar, manda a
+  // nova ordem dos irmãos para o servidor e mostra "Ordem salva".
+  Revisa.ordem = function (token, url) {
+    if (!window.Sortable) return;
+    var aviso = document.querySelector('[data-ord-aviso]');
+    var timer;
+    function avisar(texto, erro) {
+      aviso.textContent = texto;
+      aviso.classList.toggle('erro', !!erro);
+      aviso.classList.add('mostra');
+      clearTimeout(timer);
+      timer = setTimeout(function () { aviso.classList.remove('mostra'); }, 1800);
+    }
+    document.querySelectorAll('[data-ordem]').forEach(function (lista) {
+      window.Sortable.create(lista, {
+        handle: '.ord-alca', animation: 150, ghostClass: 'sortable-ghost', chosenClass: 'sortable-chosen',
+        onEnd: function (ev) {
+          if (ev.oldIndex === ev.newIndex) return;
+          var ids = Array.prototype.map.call(lista.children, function (li) { return Number(li.getAttribute('data-id')); });
+          fetch(url, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+            body: JSON.stringify({ tipo: lista.getAttribute('data-ordem'), ids: ids })
+          }).then(function (r) {
+            avisar(r.ok ? 'Ordem salva' : 'Não deu para salvar. Recarregue a página.', !r.ok);
+          }).catch(function () { avisar('Sem conexão: a ordem não foi salva.', true); });
+        }
+      });
+    });
+  };
+
   // Configurações: mostra só os blocos que valem para o modo.
   Revisa.config = function (form) {
     if (!form) return;

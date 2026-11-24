@@ -577,11 +577,11 @@ class TestApp(unittest.TestCase):
             self.post("/assuntos/novo", {"nome": nome, "materia_id": mid}, "/materias")
         html = self.c.get("/secoes/1/plano").get_data(as_text=True)
         self.assertIn("Semana 1", html)
-        # 1 por semana (3 assuntos em ~80 dias), alternando as matérias: English, Math, Math
+        # 1 por semana (3 assuntos em ~80 dias), na ordem das matérias, alternando: Math, English, Math
         semanas = html.split('class="plano-sem"')[1:]
         self.assertEqual(len(semanas), 3)
-        self.assertIn("Words in Context", semanas[0])
-        self.assertIn("Ratios", semanas[1])
+        self.assertIn("Ratios", semanas[0])
+        self.assertIn("Words in Context", semanas[1])
         self.assertIn("Percentages", semanas[2])
         # prazo escolhido: 14 dias -> 3 assuntos em 2 semanas = 2 por semana
         self.post("/secoes/1/editar", {"fim_conteudo": (hoje + timedelta(days=14)).isoformat(), "voltar": "plano"}, "/materias")
@@ -595,6 +595,53 @@ class TestApp(unittest.TestCase):
         # vazio volta ao automático
         self.post("/secoes/1/editar", {"fim_conteudo": "", "voltar": "plano"}, "/materias")
         self.assertIn("Automático", self.c.get("/secoes/1/plano").get_data(as_text=True))
+
+    def test_ordem_escolhida(self):
+        self.criar_usuario("ordem@o.com")
+        self.post("/secoes/nova", {"nome": "SAT"}, "/materias")
+        self.post("/secoes/nova", {"nome": "ENEM"}, "/materias")
+        self.post("/materias/nova", {"nome": "Math", "secao_id": "1"}, "/materias")
+        self.post("/materias/nova", {"nome": "English", "secao_id": "1"}, "/materias")
+        for nome in ("Zeta", "Alfa", "Meio"):
+            self.post("/assuntos/novo", {"nome": nome, "materia_id": "1"}, "/materias")
+        for nome in ("Sub B", "Sub A"):
+            self.post("/assuntos/novo", {"nome": nome, "materia_id": "1", "parent_id": "1"}, "/materias")
+
+        def posicoes(*nomes, url="/materias"):
+            html = self.c.get(url).get_data(as_text=True)
+            return [html.index(n) for n in nomes]
+
+        def salvar(tipo, ids):
+            tok = self.token("/ordem")
+            return self.c.post("/ordem/salvar", json={"tipo": tipo, "ids": ids}, headers={"X-CSRF-Token": tok})
+
+        # sem ordem escolhida: ordem de cadastro (não alfabética)
+        a, b, c = posicoes(">Zeta<", ">Alfa<", ">Meio<")
+        self.assertLess(a, b); self.assertLess(b, c)
+        # a tela Ordem mostra os nomes; arrastar grava a nova ordem
+        self.assertIn("Zeta", self.c.get("/ordem").get_data(as_text=True))
+        self.assertEqual(salvar("assunto", [3, 1, 2]).status_code, 200)
+        a, b, c = posicoes(">Meio<", ">Zeta<", ">Alfa<")
+        self.assertLess(a, b); self.assertLess(b, c)
+        self.assertEqual(salvar("assunto", [5, 4]).status_code, 200)          # subassuntos de Zeta
+        a, b = posicoes(">Sub A<", ">Sub B<")
+        self.assertLess(a, b)
+        self.assertEqual(salvar("materia", [2, 1]).status_code, 200)
+        self.assertEqual(salvar("secao", [2, 1]).status_code, 200)
+        en, ma = posicoes("<h3>English</h3>", "<h3>Math</h3>")
+        self.assertLess(en, ma)
+        sat, enem = posicoes("<h2>SAT</h2>", "<h2>ENEM</h2>")
+        self.assertLess(enem, sat)
+        # lista incompleta ou misturando irmãos é recusada
+        self.assertEqual(salvar("assunto", [3, 1]).status_code, 400)
+        self.assertEqual(salvar("assunto", [3, 1, 2, 4]).status_code, 400)
+        # a ordem vale no exportar
+        nomes = [x["nome"] for x in self.c.get("/configuracoes/exportar").get_json()["materias"][1]["assuntos"]]
+        self.assertEqual(nomes, ["Meio", "Zeta", "Alfa"])
+        # itens de outro usuário: recusado
+        self.sair()
+        self.criar_usuario("outro@o.com")
+        self.assertEqual(salvar("assunto", [3, 1, 2]).status_code, 400)
 
     def test_pwa(self):
         r = self.c.get("/manifest.webmanifest")

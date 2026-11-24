@@ -213,7 +213,7 @@ def materias_com_assuntos(uid: int) -> list[dict]:
     """
     db = banco.get_db()
     materias = sorted((dict(m) for m in db.execute(
-        "SELECT id, nome, dias_estudo, secao_id FROM materias WHERE usuario_id = ?", (uid,))), key=lambda m: S.chave_ordem(m["nome"]))
+        "SELECT id, nome, dias_estudo, secao_id, ordem FROM materias WHERE usuario_id = ?", (uid,))), key=S.posicao)
     for m in materias:
         m["dias_estudo"] = S.ler_dias(m["dias_estudo"])
     por_materia: dict[int, list] = {m["id"]: [] for m in materias}
@@ -574,7 +574,7 @@ def registrar_rotas(app: Flask):
 
         # Assunto com subassuntos: vira grupo, mostra o domínio de cada um e a média
         filhos = [dict(f) for f in db.execute(
-            "SELECT id, nome FROM assuntos WHERE parent_id = ? AND usuario_id = ? ORDER BY nome COLLATE NOCASE",
+            "SELECT id, nome FROM assuntos WHERE parent_id = ? AND usuario_id = ? ORDER BY COALESCE(ordem, id), id",
             (aid, current_user.id))]
         dominio_grupo = None
         if filhos:
@@ -626,8 +626,8 @@ def registrar_rotas(app: Flask):
                 por_cartao[lado["id"]] = lado
         lista = sorted(por_cartao.values(), key=lambda c: -c["id"])
         f = C.fila(db, current_user.id, S.hoje(), baralho_id=bid)
-        materias_b = sorted((dict(m) for m in db.execute("SELECT id, nome FROM materias WHERE usuario_id = ?",
-                                                         (current_user.id,))), key=lambda m: S.chave_ordem(m["nome"]))
+        materias_b = sorted((dict(m) for m in db.execute("SELECT id, nome, ordem FROM materias WHERE usuario_id = ?",
+                                                         (current_user.id,))), key=S.posicao)
         return render_template("baralho.html", b=b, cartoes=lista, fila=f, materias=materias_b,
                                busca=(request.args.get("q") or "").strip())
 
@@ -866,6 +866,31 @@ def registrar_rotas(app: Flask):
         if sid:
             do_usuario("secoes", sid)
         return sid or None
+
+    @app.route("/ordem")
+    @login_required
+    def ordem():
+        """Tela "Ordem": só os nomes, para arrastar seções, matérias, assuntos e subassuntos."""
+        todas = materias_com_assuntos(current_user.id)
+        secoes = S.listar_secoes(banco.get_db(), current_user.id)
+        for sec in secoes:
+            sec["materias"] = [m for m in todas if m["secao_id"] == sec["id"]]
+        soltas = [m for m in todas if not m["secao_id"]]
+        return render_template("ordem.html", secoes=secoes, soltas=soltas)
+
+    @app.route("/ordem/salvar", methods=["POST"])
+    @login_required
+    def salvar_ordem():
+        """Recebe {tipo, ids} (JSON) depois de arrastar e grava a nova ordem."""
+        dados = request.get_json(silent=True) or {}
+        tabela = {"secao": "secoes", "materia": "materias", "assunto": "assuntos"}.get(dados.get("tipo"))
+        try:
+            if not tabela or not isinstance(dados.get("ids"), list):
+                raise ValueError
+            S.reordenar(banco.get_db(), current_user.id, tabela, dados["ids"])
+        except (ValueError, TypeError):
+            return {"ok": False}, 400
+        return {"ok": True}
 
     @app.route("/secoes/nova", methods=["POST"])
     @login_required

@@ -119,9 +119,10 @@ def listar_baralhos(db, uid: int, dia: date) -> list[dict]:
     for c in todos:
         por_baralho[c["baralho_id"]].append(c)
     materias = sorted((dict(m) for m in db.execute(
-        """SELECT m.id, m.nome, s.nome AS secao FROM materias m LEFT JOIN secoes s ON s.id = m.secao_id
+        """SELECT m.id, m.nome, s.nome AS secao, COALESCE(s.ordem, s.id) AS pos_secao,
+                  COALESCE(m.ordem, m.id) AS pos FROM materias m LEFT JOIN secoes s ON s.id = m.secao_id
            WHERE m.usuario_id = ?""", (uid,))),
-        key=lambda m: (m["secao"] is None, S.chave_ordem(m["secao"] or ""), S.chave_ordem(m["nome"])))
+        key=lambda m: (m["pos_secao"] is None, m["pos_secao"] or 0, m["pos"], m["id"]))
     por_materia = {m["id"]: [] for m in materias}
     for b in db.execute("SELECT id, materia_id, nome FROM baralhos WHERE usuario_id = ?", (uid,)):
         lados = por_baralho.get(b["id"], [])

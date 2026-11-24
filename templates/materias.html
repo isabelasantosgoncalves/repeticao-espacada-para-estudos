@@ -8,6 +8,7 @@
    Cada matéria é um bloco com os assuntos em cartões, numa grade que usa a
    largura da tela, e um modo de edição próprio (botão "Editar matéria").
    Os formulários levam "editando=1" para a página voltar no mesmo modo e lugar.
+   A ordem é a escolhida pelo usuário na tela "Ordem" (sem escolha, a de cadastro).
    (No banco: seções = secoes, matérias = materias.)
 --------------------------------------------------------------------------- #}
 
@@ -163,6 +164,8 @@
     <p class="selo">Cadastro</p>
     <h1>Seções e matérias</h1>
   </div>
+  <div class="cab-acoes">
+  {% if materias %}<a class="btn btn-fantasma" href="{{ url_for('ordem') }}">Ordem</a>{% endif %}
   <details class="nova-materia-d nova-secao-d" {{ 'open' if not secoes and not materias }}>
     <summary class="btn">+ Nova seção</summary>
     <form method="post" action="{{ url_for('criar_secao') }}" class="nova-materia-form nova-secao-form" data-meta-raiz>
@@ -174,6 +177,7 @@
       <button class="btn btn-p">Criar seção</button>
     </form>
   </details>
+  </div>
 </div>
 
 {% if not secoes and not materias %}

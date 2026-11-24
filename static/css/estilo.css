@@ -895,3 +895,29 @@ kbd { font-family: var(--mono); font-size: .7rem; padding: 1px 5px; border-radiu
   .plano-numeros > div:nth-child(n+3) { border-top: 1px solid var(--linha); }
   .plano-lista > li { grid-template-columns: 1fr; gap: 6px; }
 }
+
+/* ---------- tela "Ordem": arrastar e soltar ---------- */
+.ord-ajuda { margin-top: -8px; }
+.ord-bloco { margin: 0 0 34px; }
+.ord-bloco > h2 { margin: 0 0 10px; font-size: 1.5rem; }
+.ord-materia { margin: 0 0 22px; }
+.ord-materia > h3 { margin: 0 0 8px; font-size: 1.1rem; }
+.ord-rotulo { display: block; font-family: var(--mono); font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-2); margin: 0 0 6px; }
+.ord-lista { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 6px; }
+.ord-lista > li { background: var(--superficie); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+.ord-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; }
+.ord-alca { cursor: grab; color: var(--texto-3); font-size: 1.1rem; line-height: 1; user-select: none; touch-action: none; padding: 2px 4px; }
+.ord-alca:active { cursor: grabbing; }
+.ord-nome { flex: 1; font-weight: 500; }
+.ord-sub-d { padding: 0 12px 10px 38px; }
+.ord-sub-d summary { cursor: pointer; font-size: .8rem; color: var(--acento); width: max-content; }
+.ord-sub-d .ord-lista { margin: 8px 0 0; }
+.ord-sub-d .ord-lista > li { box-shadow: none; background: var(--fundo); }
+.ord-sub-d .ord-item { padding: 6px 10px; }
+.ord-sub-d .ord-nome { font-weight: 400; font-size: .9rem; }
+.ord-lista .sortable-ghost { opacity: .35; }
+.ord-lista .sortable-chosen { border-color: var(--acento); }
+.ord-salvo { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 30; padding: 8px 16px; border-radius: 999px;
+  background: var(--acento); color: #fff; font-size: .86rem; box-shadow: 0 6px 18px rgba(20, 30, 24, .2); opacity: 0; transition: opacity .2s; pointer-events: none; }
+.ord-salvo.mostra { opacity: 1; }
+.ord-salvo.erro { background: var(--vermelho); }

@@ -145,7 +145,7 @@ def metas_por_assunto(db, uid: int) -> dict[int, date]:
 def listar_secoes(db, uid: int) -> list[dict]:
     """Seções do usuário (com a prova já formatada), em ordem alfabética."""
     res = []
-    for r in db.execute("SELECT id, nome, data_meta, fim_conteudo FROM secoes WHERE usuario_id = ?", (uid,)):
+    for r in db.execute("SELECT id, nome, data_meta, fim_conteudo, ordem FROM secoes WHERE usuario_id = ?", (uid,)):
         sec = dict(r)
         try:
             sec["fim"] = date.fromisoformat(sec["fim_conteudo"]) if sec["fim_conteudo"] else None
@@ -155,7 +155,7 @@ def listar_secoes(db, uid: int) -> list[dict]:
         sec["meta_txt"] = meta_txt(sec["data_meta"])
         sec["aproximada"] = meta_aproximada(sec["data_meta"])
         res.append(sec)
-    return sorted(res, key=lambda x: chave_ordem(x["nome"]))
+    return sorted(res, key=posicao)
 
 
 # ---------------------------------------------------------------------------
@@ -196,18 +196,20 @@ def listar_assuntos(db, uid: int) -> list[dict]:
     - rotulo: "Pai › Sub" ou só o nome;
     - grupo: True se o assunto tem subassuntos (vira um agrupador: as sessões
       e revisões acontecem nos subassuntos).
-    Ordenados por matéria, depois pai, com os subassuntos logo abaixo do pai.
+    Na ordem escolhida pelo usuário (seção, matéria, assunto), com os
+    subassuntos logo abaixo do pai. Sem ordem escolhida, vale a de cadastro.
     """
     rows = db.execute(
-        """SELECT a.id, a.nome, a.materia_id, a.parent_id, m.nome AS materia, p.nome AS pai,
+        """SELECT a.id, a.nome, a.materia_id, a.parent_id, a.ordem, m.nome AS materia, p.nome AS pai,
                   m.dias_estudo AS dias_materia,
+                  COALESCE(a.ordem, a.id) AS pos, COALESCE(p.ordem, p.id) AS pos_pai,
+                  COALESCE(m.ordem, m.id) AS pos_materia, COALESCE(s.ordem, s.id) AS pos_secao,
                   (SELECT COUNT(*) FROM assuntos f WHERE f.parent_id = a.id) AS n_filhos
            FROM assuntos a
            JOIN materias m ON m.id = a.materia_id
+           LEFT JOIN secoes s ON s.id = m.secao_id
            LEFT JOIN assuntos p ON p.id = a.parent_id
-           WHERE a.usuario_id = ?
-           ORDER BY m.nome COLLATE NOCASE, COALESCE(p.nome, a.nome) COLLATE NOCASE,
-                    a.parent_id IS NOT NULL, a.nome COLLATE NOCASE""",
+           WHERE a.usuario_id = ?""",
         (uid,),
     ).fetchall()
     res = []
@@ -217,10 +219,16 @@ def listar_assuntos(db, uid: int) -> list[dict]:
         a["grupo"] = a["n_filhos"] > 0
         a["dias_materia"] = ler_dias(a["dias_materia"])
         res.append(a)
-    # Ordem alfabética ignorando acentos (o SQLite poria "Álgebra" depois de "Z")
-    res.sort(key=lambda a: (chave_ordem(a["materia"]), chave_ordem(a["pai"] or a["nome"]),
-                            a["parent_id"] is not None, chave_ordem(a["nome"])))
+    # seções primeiro (matérias sem seção no fim), depois matéria, assunto pai e subassuntos
+    res.sort(key=lambda a: (a["pos_secao"] is None, a["pos_secao"] or 0, a["pos_materia"], a["materia_id"],
+                            a["pos_pai"] if a["parent_id"] else a["pos"], a["parent_id"] or a["id"],
+                            a["parent_id"] is not None, a["pos"], a["id"]))
     return res
+
+
+def posicao(item: dict) -> tuple:
+    """Ordem escolhida pelo usuário; sem ela, a ordem de cadastro (id)."""
+    return (item["ordem"] if item.get("ordem") is not None else item["id"], item["id"])
 
 
 def chave_ordem(texto: str) -> str:
@@ -493,13 +501,13 @@ def montar_metas(db, uid: int, dia: date, assuntos: dict | None = None, com_plan
                       "meta_txt": meta_txt(texto), "aproximada": meta_aproximada(texto),
                       "fim_sugerido": L.fim_automatico(dia, meta)})
         if com_plano:
-            # cada matéria é uma fila, na ordem em que os assuntos foram cadastrados
-            # (assunto pai primeiro, depois os subassuntos dele)
+            # cada matéria é uma fila, na ordem escolhida pelo usuário
+            # as folhas já vêm na ordem escolhida (listar_folhas)
             filas = {}
-            for a in sorted(folhas, key=lambda a: (a["parent_id"] or a["id"], a["id"])):
+            for a in folhas:
                 if a["id"] not in primeira:
                     filas.setdefault(a["materia_id"], []).append(a)
-            ordem = sorted(filas, key=lambda mid: chave_ordem(materias[mid]["nome"]))
+            ordem = list(filas)
             plano["semanas"] = L.plano_semanal(dia, plano["por_semana"], [filas[m] for m in ordem])
         res.append(plano)
     res.sort(key=lambda p: (p["faltam"] < 0, p["meta"]))
@@ -614,15 +622,16 @@ def exportar(db, uid: int) -> dict:
                WHERE usuario_id = ? AND assunto_id = ? ORDER BY data, id""", (uid, aid))]
 
     for m in db.execute("""SELECT m.id, m.nome, m.dias_estudo, s.nome AS secao FROM materias m
-                            LEFT JOIN secoes s ON s.id = m.secao_id WHERE m.usuario_id = ? ORDER BY m.id""", (uid,)):
+                            LEFT JOIN secoes s ON s.id = m.secao_id WHERE m.usuario_id = ?
+                            ORDER BY s.id IS NULL, COALESCE(s.ordem, s.id), COALESCE(m.ordem, m.id), m.id""", (uid,)):
         assuntos = []
         for a in db.execute(
                 """SELECT id, nome FROM assuntos
-                   WHERE usuario_id = ? AND materia_id = ? AND parent_id IS NULL ORDER BY id""",
+                   WHERE usuario_id = ? AND materia_id = ? AND parent_id IS NULL ORDER BY COALESCE(ordem, id), id""",
                 (uid, m["id"])):
             item = {"nome": a["nome"], "sessoes": sessoes_de(a["id"])}
             subs = [{"nome": s["nome"], "sessoes": sessoes_de(s["id"])} for s in db.execute(
-                "SELECT id, nome FROM assuntos WHERE usuario_id = ? AND parent_id = ? ORDER BY id",
+                "SELECT id, nome FROM assuntos WHERE usuario_id = ? AND parent_id = ? ORDER BY COALESCE(ordem, id), id",
                 (uid, a["id"]))]
             if subs:
                 item["subassuntos"] = subs
@@ -835,3 +844,38 @@ def _cartoes():
     """Módulo dos flashcards (importado aqui dentro: ele também importa este módulo)."""
     import cartoes
     return cartoes
+
+
+
+# ---------------------------------------------------------------------------
+# Ordem escolhida pelo usuário
+# ---------------------------------------------------------------------------
+
+def reordenar(db, uid: int, tabela: str, ids: list[int]):
+    """
+    Grava a ordem escolhida na tela "Ordem": `ids` são TODOS os irmãos (seções
+    do usuário; matérias da mesma seção; assuntos da mesma matéria e do mesmo
+    pai), na nova ordem. Qualquer outra lista é recusada (ValueError).
+    """
+    assert tabela in ("secoes", "materias", "assuntos")
+    ids = [int(i) for i in ids]
+    if not ids or len(set(ids)) != len(ids):
+        raise ValueError("lista inválida")
+    marcas = ",".join("?" * len(ids))
+    linhas = db.execute(f"SELECT * FROM {tabela} WHERE usuario_id = ? AND id IN ({marcas})", [uid, *ids]).fetchall()
+    if len(linhas) != len(ids):
+        raise ValueError("lista inválida")
+    filtro, params = "usuario_id = ?", [uid]
+    primeiro = linhas[0]
+    if tabela == "materias":
+        filtro += " AND secao_id IS ?"
+        params.append(primeiro["secao_id"])
+    elif tabela == "assuntos":
+        filtro += " AND materia_id = ? AND parent_id IS ?"
+        params += [primeiro["materia_id"], primeiro["parent_id"]]
+    irmaos = {r["id"] for r in db.execute(f"SELECT id FROM {tabela} WHERE {filtro}", params)}
+    if irmaos != set(ids):
+        raise ValueError("lista inválida")
+    for pos, iid in enumerate(ids):
+        db.execute(f"UPDATE {tabela} SET ordem = ? WHERE id = ? AND usuario_id = ?", (pos, iid, uid))
+    db.commit()
