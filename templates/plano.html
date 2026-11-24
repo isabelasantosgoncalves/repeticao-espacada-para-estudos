@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block titulo %}Plano · {{ p.nome }}{% endblock %}
+{% block main_class %}conteudo medio{% endblock %}
+
+{# Plano de conteúdo da seção: prazo para terminar os assuntos novos, ritmo e as semanas #}
+{% macro data(d) %}{{ d.strftime('%d/%m/%Y') }}{% endmacro %}
+
+{% block conteudo %}
+<div class="cab-pagina">
+  <div>
+    <p class="selo"><a href="{{ url_for('materias') }}#secao-{{ p.secao_id }}">Seções</a> · plano de conteúdo</p>
+    <h1>{{ p.nome }}</h1>
+  </div>
+  <p class="plano-prova">Prova {{ p.meta_txt }} · {% if p.faltam > 0 %}faltam {{ '~' if p.aproximada }}{{ p.faltam }} dias{% else %}já passou{% endif %}</p>
+</div>
+
+<section class="painel plano-resumo">
+  <div class="plano-numeros">
+    <div><span>Ainda não começados</span><b>{{ p.nao_iniciados }}</b><small>de {{ p.total }} assuntos</small></div>
+    <div><span>Precisa começar</span><b>{{ p.por_semana }}</b><small>assunto{{ 's' if p.por_semana != 1 }} novo{{ 's' if p.por_semana != 1 }} por semana</small></div>
+    <div><span>Seu ritmo atual</span><b>{{ '%.1f' | format(p.ritmo_atual) | replace('.', ',') | replace(',0', '') }}</b><small>por semana (últimas 4 semanas)</small></div>
+    <div><span>Nesse ritmo, termina em</span>
+      {% if p.nao_iniciados == 0 %}<b class="txt-verde">pronto</b><small>tudo já começado</small>
+      {% elif p.previsao %}<b class="{{ 'txt-verde' if p.previsao_ok else 'txt-amarelo' }}">{{ p.previsao.strftime('%d/%m') }}</b>
+        <small>{{ 'antes do prazo' if p.previsao_ok else 'depois do prazo: acelere um pouco' }}</small>
+      {% else %}<b>—</b><small>comece o primeiro assunto</small>{% endif %}
+    </div>
+  </div>
+
+  <form method="post" action="{{ url_for('editar_secao', sid=p.secao_id) }}" class="plano-prazo">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="voltar" value="plano">
+    <label>Terminar conteúdo novo até
+      <input type="date" name="fim_conteudo" value="{{ p.fim_conteudo.isoformat() if p.fim_escolhido else '' }}" max="{{ p.meta.isoformat() }}"></label>
+    <button class="btn btn-p">Salvar prazo</button>
+    <p class="mini">
+      {% if p.fim_escolhido %}Prazo escolhido por você: {{ data(p.fim_conteudo) }}. Apague a data para voltar ao automático ({{ data(p.fim_sugerido) }}).
+      {% else %}Automático: {{ data(p.fim_conteudo) }} (reserva 1/5 do tempo até a prova só para revisão). Escolha outra data se quiser terminar antes.{% endif %}
+      Depois do prazo, {{ p.semanas_revisao }} semana{{ 's' if p.semanas_revisao != 1 }} só de revisão até a prova.
+    </p>
+  </form>
+</section>
+
+{% if p.semanas %}
+<section class="plano-semanas">
+  <h2>Semana a semana</h2>
+  <p class="sub">Os assuntos ainda não começados, na ordem em que foram cadastrados, alternando as matérias. É uma sugestão: se começar outro, o plano se ajusta.</p>
+  <ol class="plano-lista">
+    {% for s in p.semanas %}
+    <li class="{{ 'passa-prazo' if s.inicio > p.fim_conteudo }}">
+      <div class="plano-sem">
+        <b>Semana {{ loop.index }}</b>
+        <small>{{ s.inicio.strftime('%d/%m') }} a {{ s.fim.strftime('%d/%m') }}</small>
+      </div>
+      <ul>
+        {% for a in s.itens %}
+        <li><a href="{{ url_for('nova_sessao', assunto=a.id) }}" title="Registrar a primeira prática">{{ a.nome }}</a>
+          <small>{{ a.materia }}{% if a.pai %} · {{ a.pai }}{% endif %}</small></li>
+        {% endfor %}
+      </ul>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% elif p.nao_iniciados == 0 %}
+<div class="painel vazio"><h2>Todo o conteúdo já foi começado</h2><p class="sub">Agora é revisar até a prova.</p></div>
+{% endif %}
+{% endblock %}

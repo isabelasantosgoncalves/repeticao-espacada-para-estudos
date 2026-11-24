@@ -229,6 +229,7 @@
       <h2>{{ g.nome }}</h2>
       <span class="grupo-meta">{{ g.materias | length }} matéria{{ 's' if g.materias | length != 1 }}</span>
       {% if g.meta %}<span class="grupo-prova {{ 'passou' if g.faltam < 0 }}">{{ prova_txt(g) }}</span>
+      <a class="grupo-plano" href="{{ url_for('plano_secao', sid=g.id) }}">Plano de conteúdo →</a>
       {% else %}<span class="grupo-meta">sem prova</span>{% endif %}
     </div>
     <details class="grupo-editar">
@@ -239,6 +240,8 @@
           <label>Nome da seção <input type="text" name="nome" value="{{ g.nome }}" required maxlength="120"></label>
           <span class="ed-rotulo">Data da prova</span>
           {{ campos.meta('meta', g.data_meta) }}
+          <label>Terminar conteúdo novo até <small class="mini">vazio = automático</small>
+            <input type="date" name="fim_conteudo" value="{{ g.fim_conteudo or '' }}"></label>
           <button class="btn btn-p">Salvar seção</button>
         </form>
         <form method="post" action="{{ url_for('excluir_secao', sid=g.id) }}"

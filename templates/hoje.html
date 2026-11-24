@@ -48,10 +48,12 @@
       {% if p.status == 'passou' %}A prova passou: troque a data em <a href="{{ url_for('configuracoes') }}#prova">Configurações</a>.
       {% elif p.status == 'concluido' %}Todo o conteúdo começado. Agora é revisar.
       {% elif p.status == 'atrasado' %}<span class="txt-vermelho">Prazo do conteúdo novo passou: falta{{ 'm' if p.nao_iniciados > 1 }} {{ p.nao_iniciados }}.</span>
-      {% else %}<b>{{ p.por_semana }} novo{{ 's' if p.por_semana > 1 }}/semana</b> até {{ p.fim_conteudo.strftime('%d/%m') }} ·
-        <span class="{{ 'txt-amarelo' if p.status == 'abaixo' else 'txt-verde' }}">últimos 7 dias: {{ p.iniciados_semana }}</span>
+      {% else %}<b>{{ p.por_semana }} novo{{ 's' if p.por_semana > 1 }}/semana</b> até {{ p.fim_conteudo.strftime('%d/%m') }}
+        {% if p.previsao %}· <span class="{{ 'txt-verde' if p.previsao_ok else 'txt-amarelo' }}">no seu ritmo, termina {{ p.previsao.strftime('%d/%m') }}</span>
+        {% else %}· <span class="{{ 'txt-amarelo' if p.status == 'abaixo' else 'txt-verde' }}">últimos 7 dias: {{ p.iniciados_semana }}</span>{% endif %}
       {% endif %}
     </small>
+    {% if p.status != 'passou' %}<a class="kpi-plano" href="{{ url_for('plano_secao', sid=p.secao_id) }}">Ver o plano →</a>{% endif %}
     {% if p.reta_final and p.status != 'passou' and cfg.ritmo != 'intenso' %}
     <small class="kpi-ritmo txt-amarelo">Reta final: se der, ritmo Intenso.</small>
     {% endif %}

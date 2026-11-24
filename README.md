@@ -232,9 +232,14 @@ dia 1º, para nenhuma revisão passar da prova, e o painel mostra a contagem com
 - **Nenhuma revisão passa da prova.** O intervalo fica limitado à **metade dos dias que faltam**,
   contando da última prática. Assim os intervalos encolhem conforme a prova chega (a 60 dias, no
   máximo 30; a 14, no máximo 7; na véspera, 1) e todo assunto tem uma revisão perto dela.
-- **Ritmo de conteúdo novo.** Antes da prova fica uma margem só para revisar (1/5 do tempo que falta,
-  entre 7 e 60 dias). O painel calcula quantos assuntos novos começar por semana para terminar até lá
-  e compara com o que foi começado nos últimos 7 dias.
+- **Prazo do conteúdo novo.** Cada seção pode ter a data "Terminar conteúdo novo até" (ex.: dois meses
+  antes da prova). Sem ela, o app reserva automaticamente 1/5 do tempo até a prova só para revisão
+  (entre 7 e 60 dias). Com o prazo, o painel calcula quantos assuntos novos começar por semana
+  (assuntos não começados ÷ semanas até o prazo) e faz uma **previsão no seu ritmo**: a média de
+  assuntos começados por semana nas últimas 4 semanas diz em que data o conteúdo termina.
+- **Plano de conteúdo** (seção → "Plano de conteúdo"): os assuntos ainda não começados distribuídos
+  pelas semanas, na ordem em que foram cadastrados, alternando as matérias. É uma sugestão; se você
+  começar outro assunto, o plano se refaz.
 - **Contagem regressiva** no painel e, nos últimos 30 dias, a sugestão de passar para o ritmo Intenso.
 
 ### 10. Flashcards

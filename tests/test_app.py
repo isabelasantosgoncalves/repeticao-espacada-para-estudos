@@ -565,6 +565,37 @@ class TestApp(unittest.TestCase):
         self.criar_usuario("outro@anki.com")
         self.assertEqual(self.c.get("/flashcards/imagens/3").status_code, 404)
 
+    def test_plano_de_conteudo(self):
+        from datetime import timedelta
+        hoje = S.hoje()
+        self.criar_usuario("plano@p.com")
+        prova = hoje + timedelta(days=100)
+        self.post("/secoes/nova", {"nome": "SAT", "meta_tipo": "dia", "meta_dia": prova.isoformat()}, "/materias")
+        self.post("/materias/nova", {"nome": "Math", "secao_id": "1"}, "/materias")
+        self.post("/materias/nova", {"nome": "English", "secao_id": "1"}, "/materias")
+        for nome, mid in (("Ratios", "1"), ("Percentages", "1"), ("Words in Context", "2")):
+            self.post("/assuntos/novo", {"nome": nome, "materia_id": mid}, "/materias")
+        html = self.c.get("/secoes/1/plano").get_data(as_text=True)
+        self.assertIn("Semana 1", html)
+        # 1 por semana (3 assuntos em ~80 dias), alternando as matérias: English, Math, Math
+        semanas = html.split('class="plano-sem"')[1:]
+        self.assertEqual(len(semanas), 3)
+        self.assertIn("Words in Context", semanas[0])
+        self.assertIn("Ratios", semanas[1])
+        self.assertIn("Percentages", semanas[2])
+        # prazo escolhido: 14 dias -> 3 assuntos em 2 semanas = 2 por semana
+        self.post("/secoes/1/editar", {"fim_conteudo": (hoje + timedelta(days=14)).isoformat(), "voltar": "plano"}, "/materias")
+        html = self.c.get("/secoes/1/plano").get_data(as_text=True)
+        self.assertIn("Prazo escolhido por você", html)
+        self.assertIn("Ver o plano", self.c.get("/hoje").get_data(as_text=True))
+        dados = self.c.get("/configuracoes/exportar").get_json()
+        self.assertEqual(dados["secoes"][0]["fim_conteudo"], (hoje + timedelta(days=14)).isoformat())
+        # o nome e a prova continuaram os mesmos
+        self.assertEqual(dados["secoes"][0]["data_meta"], prova.isoformat())
+        # vazio volta ao automático
+        self.post("/secoes/1/editar", {"fim_conteudo": "", "voltar": "plano"}, "/materias")
+        self.assertIn("Automático", self.c.get("/secoes/1/plano").get_data(as_text=True))
+
     def test_pwa(self):
         r = self.c.get("/manifest.webmanifest")
         self.assertEqual(r.status_code, 200)

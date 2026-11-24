@@ -93,6 +93,17 @@ def meta_txt(texto: str | None) -> str:
     return f"{t[8:10]}/{t[5:7]}/{t[:4]}"
 
 
+def ler_fim_conteudo(form) -> str | None:
+    """Campo "Terminar conteúdo novo até": vazio = automático; senão, uma data."""
+    texto = (form.get("fim_conteudo") or "").strip()
+    if not texto:
+        return None
+    try:
+        return date.fromisoformat(texto).isoformat()
+    except ValueError:
+        raise ValueError("Data para terminar o conteúdo inválida.")
+
+
 def ler_campo_meta(form, prefixo: str) -> str | None:
     """
     Campos de prova de um formulário: `<prefixo>_tipo` (sem, mes ou dia) e
@@ -134,8 +145,12 @@ def metas_por_assunto(db, uid: int) -> dict[int, date]:
 def listar_secoes(db, uid: int) -> list[dict]:
     """Seções do usuário (com a prova já formatada), em ordem alfabética."""
     res = []
-    for r in db.execute("SELECT id, nome, data_meta FROM secoes WHERE usuario_id = ?", (uid,)):
+    for r in db.execute("SELECT id, nome, data_meta, fim_conteudo FROM secoes WHERE usuario_id = ?", (uid,)):
         sec = dict(r)
+        try:
+            sec["fim"] = date.fromisoformat(sec["fim_conteudo"]) if sec["fim_conteudo"] else None
+        except ValueError:
+            sec["fim"] = None
         sec["meta"] = ler_meta(sec["data_meta"])
         sec["meta_txt"] = meta_txt(sec["data_meta"])
         sec["aproximada"] = meta_aproximada(sec["data_meta"])
@@ -449,10 +464,11 @@ def montar_hoje(db, uid: int, dia: date) -> dict:
     }
 
 
-def montar_metas(db, uid: int, dia: date, assuntos: dict | None = None) -> list[dict]:
+def montar_metas(db, uid: int, dia: date, assuntos: dict | None = None, com_plano: bool = False) -> list[dict]:
     """
-    Seções com data de prova: contagem regressiva e ritmo de assuntos novos
-    (ver logica.plano_da_meta). Ordenadas pela prova mais próxima.
+    Seções com data de prova: contagem regressiva, ritmo de assuntos novos,
+    previsão no ritmo atual (ver logica.plano_da_meta) e, com `com_plano`, o
+    plano semana a semana. Ordenadas pela prova mais próxima.
     """
     if assuntos is None:
         assuntos = {a["id"]: a for a in listar_folhas(db, uid)}
@@ -460,19 +476,31 @@ def montar_metas(db, uid: int, dia: date, assuntos: dict | None = None) -> list[
     primeira = {r["assunto_id"]: para_data(r["d"]) for r in db.execute(
         "SELECT assunto_id, MIN(data) AS d FROM sessoes WHERE usuario_id = ? GROUP BY assunto_id", (uid,))}
     inicio_semana = dia - timedelta(days=6)
-    materia_secao = {r["id"]: r["secao_id"] for r in db.execute(
-        "SELECT id, secao_id FROM materias WHERE usuario_id = ?", (uid,))}
+    inicio_4_semanas = dia - timedelta(days=27)
+    materias = {r["id"]: dict(r) for r in db.execute(
+        "SELECT id, nome, secao_id FROM materias WHERE usuario_id = ?", (uid,))}
     res = []
     for sec in listar_secoes(db, uid):
         meta, texto = sec["meta"], sec["data_meta"]
         if not meta:
             continue
-        folhas = [a for a in assuntos.values() if materia_secao.get(a["materia_id"]) == sec["id"]]
+        folhas = [a for a in assuntos.values() if materias.get(a["materia_id"], {}).get("secao_id") == sec["id"]]
         nao = sum(1 for a in folhas if a["id"] not in primeira)
         semana = sum(1 for a in folhas if a["id"] in primeira and inicio_semana <= primeira[a["id"]] <= dia)
-        plano = L.plano_da_meta(dia, meta, nao, semana)
+        quatro = sum(1 for a in folhas if a["id"] in primeira and inicio_4_semanas <= primeira[a["id"]] <= dia)
+        plano = L.plano_da_meta(dia, meta, nao, semana, fim=sec["fim"], iniciados_4_semanas=quatro)
         plano.update({"secao_id": sec["id"], "nome": sec["nome"], "total": len(folhas),
-                      "meta_txt": meta_txt(texto), "aproximada": meta_aproximada(texto)})
+                      "meta_txt": meta_txt(texto), "aproximada": meta_aproximada(texto),
+                      "fim_sugerido": L.fim_automatico(dia, meta)})
+        if com_plano:
+            # cada matéria é uma fila, na ordem em que os assuntos foram cadastrados
+            # (assunto pai primeiro, depois os subassuntos dele)
+            filas = {}
+            for a in sorted(folhas, key=lambda a: (a["parent_id"] or a["id"], a["id"])):
+                if a["id"] not in primeira:
+                    filas.setdefault(a["materia_id"], []).append(a)
+            ordem = sorted(filas, key=lambda mid: chave_ordem(materias[mid]["nome"]))
+            plano["semanas"] = L.plano_semanal(dia, plano["por_semana"], [filas[m] for m in ordem])
         res.append(plano)
     res.sort(key=lambda p: (p["faltam"] < 0, p["meta"]))
     return res
@@ -623,7 +651,8 @@ def exportar(db, uid: int) -> dict:
             "distribuicao": cfg["distribuicao"],
             "secoes_por_dia": cfg["secoes_por_dia"],
         },
-        "secoes": [{"nome": x["nome"], **({"data_meta": x["data_meta"]} if normalizar_meta(x["data_meta"]) else {})}
+        "secoes": [{"nome": x["nome"], **({"data_meta": x["data_meta"]} if normalizar_meta(x["data_meta"]) else {}),
+                    **({"fim_conteudo": x["fim"].isoformat()} if x["fim"] else {})}
                    for x in listar_secoes(db, uid)],
         "ciclo": [it["nome"] for it in ler_ciclo(db, uid)],
         "materias": materias,
@@ -681,11 +710,13 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
     for x in dados.get("secoes") or []:
         nome_x = str((x or {}).get("nome", "")).strip()[:120]
         if nome_x:
-            secoes_novas.append((nome_x, normalizar_meta(x.get("data_meta"))))
+            fim_x = normalizar_meta(x.get("fim_conteudo"))
+            secoes_novas.append((nome_x, normalizar_meta(x.get("data_meta")),
+                                 fim_x if fim_x and len(fim_x) == 10 else None))
     # seção citada por uma matéria e ausente da lista: cria sem prova
     for *_, secao_m, _b in plano:
-        if secao_m and secao_m not in {n for n, _ in secoes_novas}:
-            secoes_novas.append((secao_m, None))
+        if secao_m and secao_m not in {n for n, *_ in secoes_novas}:
+            secoes_novas.append((secao_m, None, None))
 
     cfg_nova = dados.get("configuracoes") or {}
 
@@ -698,9 +729,10 @@ def importar(db, uid: int, dados: dict, substituir: bool = True) -> dict:
             db.execute("DELETE FROM secoes WHERE usuario_id = ?", (uid,))
             db.execute("DELETE FROM imagens WHERE usuario_id = ?", (uid,))
         ids_secao = {}
-        for nome_x, meta_x in secoes_novas:
-            ids_secao[nome_x] = db.execute("INSERT INTO secoes (usuario_id, nome, data_meta) VALUES (?, ?, ?)",
-                                           (uid, nome_x, meta_x)).lastrowid
+        for nome_x, meta_x, fim_x in secoes_novas:
+            ids_secao[nome_x] = db.execute(
+                "INSERT INTO secoes (usuario_id, nome, data_meta, fim_conteudo) VALUES (?, ?, ?, ?)",
+                (uid, nome_x, meta_x, fim_x)).lastrowid
         n_m = n_a = n_s = 0
         import cartoes as C
         n_c = 0

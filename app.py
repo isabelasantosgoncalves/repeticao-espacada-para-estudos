@@ -887,15 +887,32 @@ def registrar_rotas(app: Flask):
     def editar_secao(sid):
         do_usuario("secoes", sid)
         try:
-            nome = nome_valido(request.form.get("nome"), "da seção", 120)
-            meta = S.ler_campo_meta(request.form, "meta")
-            banco.get_db().execute("UPDATE secoes SET nome = ?, data_meta = ? WHERE id = ? AND usuario_id = ?",
-                                   (nome, meta, sid, current_user.id))
+            atual = do_usuario("secoes", sid)
+            nome = nome_valido(request.form.get("nome"), "da seção", 120) if "nome" in request.form else atual["nome"]
+            meta = S.ler_campo_meta(request.form, "meta") if "meta_tipo" in request.form else atual["data_meta"]
+            fim = S.ler_fim_conteudo(request.form) if "fim_conteudo" in request.form else atual["fim_conteudo"]
+            banco.get_db().execute(
+                "UPDATE secoes SET nome = ?, data_meta = ?, fim_conteudo = ? WHERE id = ? AND usuario_id = ?",
+                (nome, meta, fim, sid, current_user.id))
             banco.get_db().commit()
             flash("Seção atualizada.", "ok")
         except ValueError as e:
             flash(str(e), "erro")
+        if request.form.get("voltar") == "plano":
+            return redirect(url_for("plano_secao", sid=sid))
         return redirect(url_for("materias") + f"#secao-{sid}")
+
+    @app.route("/secoes/<int:sid>/plano")
+    @login_required
+    def plano_secao(sid):
+        """Plano de conteúdo da seção: prazo, ritmo e os assuntos novos semana a semana."""
+        do_usuario("secoes", sid)
+        planos = [p for p in S.montar_metas(banco.get_db(), current_user.id, S.hoje(), com_plano=True)
+                  if p["secao_id"] == sid]
+        if not planos:
+            flash("Marque a data da prova da seção para ver o plano.", "erro")
+            return redirect(url_for("materias") + f"#secao-{sid}")
+        return render_template("plano.html", p=planos[0])
 
     @app.route("/secoes/<int:sid>/excluir", methods=["POST"])
     @login_required

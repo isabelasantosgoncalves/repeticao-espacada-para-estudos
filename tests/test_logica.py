@@ -588,5 +588,28 @@ class TestPassoPeloTamanho(unittest.TestCase):
         self.assertEqual(L.peso_do_passo(None, 10), 1.0)
 
 
+class TestPrazoDoConteudo(unittest.TestCase):
+    def test_prazo_escolhido_e_previsao(self):
+        meta = HOJE + timedelta(days=150)
+        auto = L.plano_da_meta(HOJE, meta, 20, 0)
+        self.assertEqual(auto["fim_conteudo"], HOJE + timedelta(days=120))      # 1/5 de 150 = 30 dias de revisão
+        p = L.plano_da_meta(HOJE, meta, 20, 1, fim=HOJE + timedelta(days=70), iniciados_4_semanas=8)
+        self.assertEqual(p["por_semana"], 2)            # 20 assuntos em 70 dias
+        self.assertEqual(p["ritmo_atual"], 2)
+        self.assertEqual(p["previsao"], HOJE + timedelta(days=70))
+        self.assertTrue(p["previsao_ok"])
+        self.assertEqual(p["semanas_revisao"], 11)
+        devagar = L.plano_da_meta(HOJE, meta, 20, 1, fim=HOJE + timedelta(days=70), iniciados_4_semanas=4)
+        self.assertFalse(devagar["previsao_ok"])         # 1 por semana: termina em 20 semanas
+        # prazo depois da prova vira a própria prova
+        self.assertEqual(L.plano_da_meta(HOJE, meta, 5, 0, fim=meta + timedelta(days=9))["fim_conteudo"], meta)
+
+    def test_plano_semanal_alterna_materias(self):
+        semanas = L.plano_semanal(HOJE, 2, [["m1", "m2", "m3"], ["r1"]])
+        self.assertEqual([s["itens"] for s in semanas], [["m1", "r1"], ["m2", "m3"]])
+        self.assertEqual(semanas[1]["inicio"], HOJE + timedelta(days=7))
+        self.assertEqual(L.plano_semanal(HOJE, 0, [["m1"]]), [])
+
+
 if __name__ == "__main__":
     unittest.main()

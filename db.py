@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS secoes (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
     nome        TEXT    NOT NULL,
-    data_meta   TEXT
+    data_meta   TEXT,
+    fim_conteudo TEXT     -- terminar o conteúdo novo até (AAAA-MM-DD); vazio = automático
 );
 
 -- Matéria (ex.: Matemática, SAT Math), dentro de uma seção (ou solta).
@@ -168,6 +169,9 @@ def iniciar_db(caminho: str):
     # Migração: dias de estudo por seção
     if "dias_estudo" not in [r["name"] for r in con.execute("PRAGMA table_info(materias)")]:
         con.execute("ALTER TABLE materias ADD COLUMN dias_estudo TEXT NOT NULL DEFAULT ''")
+    # Migração: prazo do conteúdo novo escolhido na seção
+    if "fim_conteudo" not in [r["name"] for r in con.execute("PRAGMA table_info(secoes)")]:
+        con.execute("ALTER TABLE secoes ADD COLUMN fim_conteudo TEXT")
     # Migração: matérias agrupadas em seções
     if "secao_id" not in [r["name"] for r in con.execute("PRAGMA table_info(materias)")]:
         con.execute("ALTER TABLE materias ADD COLUMN secao_id INTEGER REFERENCES secoes(id) ON DELETE SET NULL")

@@ -416,19 +416,30 @@ def margem_de_revisao(faltam: int) -> int:
     return min(MARGEM_MAX, max(MARGEM_MIN, faltam // 5))
 
 
-def plano_da_meta(hoje: date, meta: date, nao_iniciados: int, iniciados_semana: int) -> dict:
+def fim_automatico(hoje: date, meta: date) -> date:
+    """Prazo do conteúdo novo quando a pessoa não escolhe: a prova menos 1/5 do tempo (7 a 60 dias)."""
+    return meta - timedelta(days=margem_de_revisao(max(0, (meta - hoje).days)))
+
+
+def plano_da_meta(hoje: date, meta: date, nao_iniciados: int, iniciados_semana: int,
+                  fim: date | None = None, iniciados_4_semanas: int = 0) -> dict:
     """
     Ritmo para começar todo o conteúdo a tempo de revisar antes da prova.
 
-    - fim_conteudo: data até a qual todos os assuntos devem ter sido começados
-      (a prova menos a margem de revisão);
+    - fim_conteudo: data até a qual todos os assuntos devem ter sido começados.
+      É a que a pessoa escolheu (`fim`, nunca depois da prova) ou, sem escolha,
+      a prova menos a margem de revisão (fim_automatico);
     - por_semana: assuntos novos por semana para chegar lá;
+    - ritmo_atual: média de assuntos começados por semana nas últimas 4 semanas;
+    - previsao: quando o conteúdo termina nesse ritmo (None se o ritmo é zero);
+    - semanas_revisao: semanas entre o fim do conteúdo e a prova;
     - status: 'passou' (a prova já foi), 'concluido' (tudo começado),
       'atrasado' (o prazo do conteúdo passou e ainda falta assunto),
       'abaixo' (nos últimos 7 dias começou menos que o ritmo pede) ou 'em_dia'.
     """
     faltam = (meta - hoje).days
-    fim = meta - timedelta(days=margem_de_revisao(max(0, faltam)))
+    escolhido = fim is not None
+    fim = min(fim, meta) if fim else fim_automatico(hoje, meta)
     dias_conteudo = (fim - hoje).days
     if nao_iniciados <= 0:
         por_semana = 0
@@ -436,6 +447,10 @@ def plano_da_meta(hoje: date, meta: date, nao_iniciados: int, iniciados_semana: 
         por_semana = nao_iniciados
     else:
         por_semana = ceil(nao_iniciados * 7 / dias_conteudo)
+    ritmo_atual = iniciados_4_semanas / 4
+    previsao = None
+    if nao_iniciados > 0 and ritmo_atual > 0:
+        previsao = hoje + timedelta(days=ceil(nao_iniciados / ritmo_atual) * 7)
     if faltam < 0:
         status = "passou"
     elif nao_iniciados <= 0:
@@ -447,10 +462,36 @@ def plano_da_meta(hoje: date, meta: date, nao_iniciados: int, iniciados_semana: 
     else:
         status = "em_dia"
     return {
-        "meta": meta, "faltam": faltam, "fim_conteudo": fim, "por_semana": por_semana,
-        "nao_iniciados": nao_iniciados, "iniciados_semana": iniciados_semana,
+        "meta": meta, "faltam": faltam, "fim_conteudo": fim, "fim_escolhido": escolhido,
+        "por_semana": por_semana, "nao_iniciados": nao_iniciados, "iniciados_semana": iniciados_semana,
+        "ritmo_atual": ritmo_atual, "previsao": previsao,
+        "previsao_ok": previsao is not None and previsao <= fim,
+        "semanas_revisao": max(0, (meta - fim).days // 7),
         "status": status, "reta_final": 0 <= faltam <= RETA_FINAL,
     }
+
+
+def plano_semanal(hoje: date, por_semana: int, filas: list[list]) -> list[dict]:
+    """
+    Plano de conteúdo: distribui os assuntos não começados pelas semanas, a
+    partir de hoje, `por_semana` por semana. Cada fila é uma matéria, já na
+    ordem de estudo; as matérias se alternam (Math, R&W, Math, R&W...) para
+    andarem juntas.
+    """
+    intercalados = []
+    filas = [list(f) for f in filas if f]
+    while any(filas):
+        for f in filas:
+            if f:
+                intercalados.append(f.pop(0))
+    if por_semana <= 0:
+        return []
+    semanas = []
+    for k in range(0, len(intercalados), por_semana):
+        inicio = hoje + timedelta(days=7 * len(semanas))
+        semanas.append({"inicio": inicio, "fim": inicio + timedelta(days=6),
+                        "itens": intercalados[k:k + por_semana]})
+    return semanas
 
 
 # ---------------------------------------------------------------------------
