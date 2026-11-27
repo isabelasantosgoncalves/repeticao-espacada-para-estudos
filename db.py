@@ -48,7 +48,11 @@ CREATE TABLE IF NOT EXISTS secoes (
     nome        TEXT    NOT NULL,
     data_meta   TEXT,
     fim_conteudo TEXT,    -- terminar o conteúdo novo até (AAAA-MM-DD); vazio = automático
-    ordem       INTEGER   -- posição escolhida pelo usuário; vazio = ordem de cadastro
+    ordem       INTEGER,  -- posição escolhida pelo usuário; vazio = ordem de cadastro
+    dias_estudo TEXT    NOT NULL DEFAULT '',   -- dias da semana em que a seção é estudada; vazio = todo dia
+    usa_questoes   INTEGER NOT NULL DEFAULT 1, -- a seção tem assuntos com questões
+    usa_flashcards INTEGER NOT NULL DEFAULT 1, -- a seção tem baralhos de flashcards
+    config      TEXT      -- configurações de estudo próprias (JSON); vazio = segue o padrão da conta
 );
 
 -- Matéria (ex.: Matemática, SAT Math), dentro de uma seção (ou solta).
@@ -176,6 +180,19 @@ def iniciar_db(caminho: str):
     for tabela in ("secoes", "materias", "assuntos"):
         if "ordem" not in [r["name"] for r in con.execute(f"PRAGMA table_info({tabela})")]:
             con.execute(f"ALTER TABLE {tabela} ADD COLUMN ordem INTEGER")
+    # As perguntas de estudo saíram do cadastro (agora são feitas ao criar cada seção)
+    con.execute("UPDATE usuarios SET onboarding_ok = 1 WHERE onboarding_ok = 0")
+    # Migração: configurações de estudo por seção e foto de perfil
+    if "config" not in [r["name"] for r in con.execute("PRAGMA table_info(secoes)")]:
+        con.execute("ALTER TABLE secoes ADD COLUMN config TEXT")
+    if "foto_id" not in [r["name"] for r in con.execute("PRAGMA table_info(usuarios)")]:
+        con.execute("ALTER TABLE usuarios ADD COLUMN foto_id INTEGER")
+    # Migração: dias de estudo e tipo (questões / flashcards) da seção
+    colunas_s = [r["name"] for r in con.execute("PRAGMA table_info(secoes)")]
+    for coluna, tipo in (("dias_estudo", "TEXT NOT NULL DEFAULT ''"), ("usa_questoes", "INTEGER NOT NULL DEFAULT 1"),
+                         ("usa_flashcards", "INTEGER NOT NULL DEFAULT 1")):
+        if coluna not in colunas_s:
+            con.execute(f"ALTER TABLE secoes ADD COLUMN {coluna} {tipo}")
     # Migração: prazo do conteúdo novo escolhido na seção
     if "fim_conteudo" not in [r["name"] for r in con.execute("PRAGMA table_info(secoes)")]:
         con.execute("ALTER TABLE secoes ADD COLUMN fim_conteudo TEXT")

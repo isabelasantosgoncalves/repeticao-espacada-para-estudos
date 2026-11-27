@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block titulo %}Hoje{% endblock %}
+{# resumo da revisão de uma seção no dia (cada seção tem a sua configuração) #}
+{% macro tipo_txt(g, futuro=False) %}{% if g.tipo == 'grande' %}Revisão grande{{ ' (dia fixo)' if futuro }}{% elif g.tipo == 'completa' %}Tudo que {{ 'vencer' if futuro else 'venceu' }}{% elif g.tipo == 'diaria' %}O que {{ 'vencer' if futuro else 'venceu' }} · até {{ g.cfg.revisao_minima }} por matéria{% else %}{{ 'Sem revisão' if futuro else 'Hoje não tem revisão' }}{% if g.proximo_fixo and not futuro %} · próxima em {{ g.proximo_fixo | br }}{% endif %}{% endif %}{% endmacro %}
+
 {% block conteudo %}
 <div class="cab-pagina">
   <div>
@@ -44,6 +47,7 @@
     <i class="kpi-barra"><i style="width: {{ (comecados / p.total * 100) | round }}%"></i></i>
     <small>{{ comecados }} de {{ p.total }} assuntos começados · prova {{ p.meta_txt }}</small>
     {% else %}<small>prova {{ p.meta_txt }}</small>{% endif %}
+    {% if p.usa_questoes %}
     <small class="kpi-ritmo">
       {% if p.status == 'passou' %}A prova passou: troque a data em <a href="{{ url_for('configuracoes') }}#prova">Configurações</a>.
       {% elif p.status == 'concluido' %}Todo o conteúdo começado. Agora é revisar.
@@ -54,6 +58,7 @@
       {% endif %}
     </small>
     {% if p.status != 'passou' %}<a class="kpi-plano" href="{{ url_for('plano_secao', sid=p.secao_id) }}">Ver o plano →</a>{% endif %}
+    {% endif %}
     {% if p.reta_final and p.status != 'passou' and cfg.ritmo != 'intenso' %}
     <small class="kpi-ritmo txt-amarelo">Reta final: se der, ritmo Intenso.</small>
     {% endif %}
@@ -67,13 +72,10 @@
     <div class="bloco-cab sem-num">
       <div>
         <h2>Revisões de hoje</h2>
-        <p class="sub">
-          {% if tipo == 'grande' %}Revisão grande
-          {% elif tipo == 'completa' %}Tudo que venceu
-          {% elif tipo == 'diaria' %}O que venceu · até {{ cfg.revisao_minima }} por matéria
-          {% else %}Hoje não tem revisão{% if proximo_fixo %} · próxima em {{ proximo_fixo | br }}{% endif %}
-          {% endif %}
-          {% if pausadas %}· fora hoje: {{ pausadas | join(', ') }}{% endif %}
+        <p class="sub rev-grupos">
+          {% for g in grupos %}
+          <span>{% if grupos | length > 1 %}<b>{{ g.nome or 'Sem seção' }}:</b> {% endif %}{{ tipo_txt(g) }}{% if g.pausadas %} · fora hoje: {{ g.pausadas | join(', ') }}{% endif %}</span>
+          {% else %}Hoje não tem revisão{% endfor %}
         </p>
         {% if vez %}
         <div class="vez-hoje">
@@ -88,9 +90,10 @@
           </span>
           {% endfor %}
         </div>
-        {% elif cfg.distribuicao == 'ciclo' %}
-        <p class="mini">Monte a fila do ciclo em <a href="{{ url_for('materias') }}#ciclo">Seções</a>.</p>
         {% endif %}
+        {% for g in grupos if g.ciclo_vazio %}
+        <p class="mini">Monte a fila do ciclo{{ ' de ' ~ g.nome if g.nome }} em <a href="{{ url_for('materias') }}#ciclo-{{ g.secao_id or 0 }}">Seções</a>.</p>
+        {% endfor %}
       </div>
     </div>
 
@@ -184,11 +187,10 @@
         <span class="amanha-data">{{ NOMES_DIAS[amanha.data.weekday()][:3] | lower }} {{ amanha.data.strftime('%d/%m') }}</span>
       </div>
       <p class="amanha-tipo">
-        {% if amanha.tipo == 'grande' %}Revisão grande (dia fixo)
-        {% elif amanha.tipo == 'completa' %}Tudo que vencer
-        {% elif amanha.tipo == 'diaria' %}O que vencer · até {{ cfg.revisao_minima }} por matéria
-        {% else %}Sem revisão{% endif %}
-        {% if amanha.itens %} · {{ amanha.itens | length }} assunto{{ 's' if amanha.itens | length > 1 }} · {{ amanha.questoes }} questões{% endif %}
+        {% if amanha.grupos | length > 1 %}
+        {% for g in amanha.grupos %}<span class="amanha-grupo"><b>{{ g.nome or 'Sem seção' }}:</b> {{ tipo_txt(g, True) }}</span>{% endfor %}
+        {% elif amanha.grupos %}{{ tipo_txt(amanha.grupos[0], True) }}{% else %}Sem revisão{% endif %}
+        {% if amanha.itens %}<span>{{ amanha.itens | length }} assunto{{ 's' if amanha.itens | length > 1 }} · {{ amanha.questoes }} questões</span>{% endif %}
       </p>
       {% if amanha.itens %}
       <ul class="amanha-lista">

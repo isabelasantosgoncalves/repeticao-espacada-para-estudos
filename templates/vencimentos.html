@@ -13,7 +13,7 @@
     <a class="btn btn-p {{ 'btn-fantasma' if n_dias != 14 }}" href="{{ url_for('vencimentos', dias=14) }}">14 dias</a>
   </div>
 </div>
-<p class="sub vc-nota">O que entra na revisão de cada dia{% if cfg.modo in ('diaria', 'ambos') %}, até {{ cfg.revisao_minima }} por matéria{% endif %}.</p>
+<p class="sub vc-nota">O que entra na revisão de cada dia, com as configurações de cada seção{% if limites | length == 1 %} (até {{ limites[0] }} por matéria nos dias de limite){% endif %}.</p>
 
 {% for d in dias %}
 <section class="bloco vc-dia {{ 'vazio-dia' if not d.itens }}" id="dia-{{ d.data.isoformat() }}">

@@ -53,68 +53,6 @@
 
   var Revisa = {};
 
-  // Onboarding em passos. Pula os passos que não se aplicam ao modo escolhido.
-  Revisa.onboarding = function (form) {
-    if (!form) return;
-    var passos = Array.prototype.slice.call(form.querySelectorAll('.passo'));
-    var marcas = document.querySelectorAll('.progresso li');
-    var bVoltar = form.querySelector('[data-acao="voltar"]');
-    var bAvancar = form.querySelector('[data-acao="avancar"]');
-    var bConcluir = form.querySelector('[data-acao="concluir"]');
-    var atual = 0;
-
-    function aplicavel(i) {
-      var modo = modoAtual(form);
-      var n = passos[i].getAttribute('data-passo');
-      if (n === 'dias') return modo === 'fixa' || modo === 'ambos';
-      if (n === 'secoes_dia') {
-        var d = form.querySelector('input[name="distribuicao"]:checked');
-        return !!d && d.value === 'ciclo';
-      }
-      if (n === 'minima') return modo === 'diaria' || modo === 'ambos';
-      return true;
-    }
-    function proximo(i, dir) {
-      var j = i + dir;
-      while (j >= 0 && j < passos.length && !aplicavel(j)) j += dir;
-      return j;
-    }
-    function mostrar() {
-      passos.forEach(function (p, i) { p.hidden = i !== atual; });
-      marcas.forEach(function (m, i) { m.classList.toggle('on', i <= atual); });
-      bVoltar.hidden = atual === 0;
-      var ultimo = proximo(atual, 1) >= passos.length;
-      bAvancar.hidden = ultimo;
-      bConcluir.hidden = !ultimo;
-    }
-    bAvancar.addEventListener('click', function () {
-      if (passos[atual].getAttribute('data-passo') === 'dias' && !checarDias(form)) {
-        form.querySelector('input[name="dias_fixos"]').reportValidity();
-        return;
-      }
-      var invalido = passos[atual].querySelector('input:invalid');
-      if (invalido) { invalido.reportValidity(); return; }
-      atual = proximo(atual, 1);
-      mostrar();
-    });
-    bVoltar.addEventListener('click', function () { atual = Math.max(0, proximo(atual, -1)); mostrar(); });
-    // Sugestão: ritmo intenso combina com "todo dia, tudo que vencer".
-    // Só muda o modo enquanto a pessoa ainda não escolheu um por conta própria.
-    var modoTocado = false;
-    var modoPadrao = modoAtual(form);
-    form.addEventListener('change', function (ev) {
-      if (ev.target.name === 'modo') modoTocado = true;
-      if (ev.target.name === 'ritmo' && !modoTocado) {
-        var alvo = ev.target.value === 'intenso' ? 'completa' : modoPadrao;
-        var radio = form.querySelector('input[name="modo"][value="' + alvo + '"]');
-        if (radio) radio.checked = true;
-      }
-      checarDias(form);
-      mostrar();
-    });
-    mostrar();
-  };
-
   // Data da prova: mostra o campo de mês ou de dia conforme a opção escolhida
   // (e, no onboarding, o nome da prova quando há prova).
   Revisa.metas = function (raiz) {
@@ -257,6 +195,22 @@
         }
       });
     });
+  };
+
+  // Engrenagem da seção: sem "Questões" marcada, os campos que só valem para
+  // questões (dia fixo, limite, ciclo...) somem; ficam ritmo, fase e máximo de dias.
+  Revisa.tipoSecao = function (form) {
+    if (!form) return;
+    var caixa = form.querySelector('input[name="usa_questoes"]');
+    var cartoes = form.querySelector('input[name="usa_flashcards"]');
+    if (!caixa) return;
+    function atualizar() {
+      form.querySelectorAll('[data-so-questoes]').forEach(function (b) { b.hidden = !caixa.checked; });
+      form.querySelectorAll('[data-so-flashcards]').forEach(function (b) { b.hidden = !(cartoes && cartoes.checked); });
+    }
+    caixa.addEventListener('change', atualizar);
+    if (cartoes) cartoes.addEventListener('change', atualizar);
+    atualizar();
   };
 
   // Configurações: mostra só os blocos que valem para o modo.

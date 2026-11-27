@@ -41,6 +41,71 @@
 </div>
 {% endmacro %}
 
+{# o que se estuda na seção: questões, flashcards ou os dois #}
+{% macro tipo_secao(q=True, f=True) %}
+<input type="hidden" name="tem_tipo" value="1">
+<span class="ed-rotulo">O que você estuda nesta seção</span>
+<div class="tipo-secao">
+  <label class="check"><input type="checkbox" name="usa_questoes" value="1" {{ 'checked' if q }}> Questões</label>
+  <label class="check"><input type="checkbox" name="usa_flashcards" value="1" {{ 'checked' if f }}> Flashcards</label>
+</div>
+{% endmacro %}
+
+{# quando a seção é estudada: todo dia ou só em alguns dias #}
+{% macro dias_secao(dias) %}
+<div class="sec-campo" data-frequencia-secao>
+  <span class="ed-rotulo">Quando estudo esta seção</span>
+  <div class="sec-freq">
+    <label class="check"><input type="radio" name="frequencia" value="todo" {{ 'checked' if not dias }}> Todo dia</label>
+    <label class="check"><input type="radio" name="frequencia" value="dias" {{ 'checked' if dias }}> Só em alguns dias</label>
+  </div>
+  <div class="dias sec-dias-escolha" data-dias-secao>
+    {% for nome in NOMES_DIAS %}
+    <label class="dia"><input type="checkbox" name="dias_estudo" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 in dias }}><span>{{ nome[:3] }}</span></label>
+    {% endfor %}
+  </div>
+  <small>Nos outros dias, as matérias desta seção ficam fora da revisão, sem contar atraso.</small>
+</div>
+{% endmacro %}
+
+{# Ciclo de estudos de uma seção: a fila das matérias dela, na ordem em que se repete #}
+{% macro painel_ciclo(g, materias_g, chave) %}
+{# Ciclo de estudos: a fila de matérias, na ordem em que se repete #}
+<section class="ciclo-painel" id="ciclo-{{ chave }}">
+  <div class="ciclo-cab">
+    <h2>Ciclo de estudos</h2>
+    <span class="sec-meta">{{ g.cfg.secoes_por_dia }} por dia · {{ g.ciclo | length }} na fila</span>
+  </div>
+  {% if g.ciclo %}
+  <ol class="ciclo-fila">
+    {% for it in g.ciclo %}
+    <li class="{{ 'vez' if it.id in vez_ids }}">
+      <span class="ciclo-pos">{{ loop.index }}</span>
+      <span class="ciclo-nome">{{ it.nome }}</span>
+      {% if it.id in vez_ids %}<span class="tag">hoje</span>{% endif %}
+      <span class="ciclo-acoes">
+        <form method="post" action="{{ url_for('ciclo_mover', iid=it.id, direcao='cima') }}">{{ csrf() }}<button class="ciclo-btn" title="Subir" aria-label="Subir {{ it.nome }}" {{ 'disabled' if loop.first }}>↑</button></form>
+        <form method="post" action="{{ url_for('ciclo_mover', iid=it.id, direcao='baixo') }}">{{ csrf() }}<button class="ciclo-btn" title="Descer" aria-label="Descer {{ it.nome }}" {{ 'disabled' if loop.last }}>↓</button></form>
+        <form method="post" action="{{ url_for('ciclo_remover', iid=it.id) }}">{{ csrf() }}<button class="ciclo-btn perigo" title="Tirar da fila" aria-label="Tirar {{ it.nome }} da fila">×</button></form>
+      </span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="nada">A fila está vazia. Adicione as matérias na ordem em que quer estudar.</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('ciclo_adicionar') }}" class="ciclo-add">
+    {{ csrf() }}
+    <select name="materia_id" required aria-label="Matéria para adicionar ao ciclo">
+      <option value="">Adicionar matéria à fila…</option>
+      {% for m in materias_g %}<option value="{{ m.id }}">{{ m.nome }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-p">Adicionar</button>
+  </form>
+  <p class="mini">Uma matéria pode entrar mais de uma vez, para aparecer com mais frequência.</p>
+</section>
+{% endmacro %}
+
 {# formulário curto para criar uma matéria (dentro de uma seção ou solta) #}
 {% macro nova_materia(sid, nome_secao) %}
 <form method="post" action="{{ url_for('criar_materia') }}" class="grupo-add">
@@ -57,8 +122,12 @@
   <header class="sec-cab">
     <div class="sec-titulo">
       <h3>{{ m.nome }}</h3>
+      {% if m.questoes %}
       <span class="sec-meta">{{ m.folhas | length }} assunto{{ 's' if m.folhas | length != 1 }} · {{ m.folhas | sum(attribute='n_sessoes') }} práticas</span>
-      {% if cfg.distribuicao == 'dias' %}<span class="sec-dias" title="Dias em que esta matéria entra na revisão">{{ dias_txt(m.dias_estudo) }}</span>{% endif %}
+      {% else %}
+      <span class="sec-meta">{{ m.baralhos | length }} baralho{{ 's' if m.baralhos | length != 1 }} · {{ m.baralhos | sum(attribute='total') }} cartões</span>
+      {% endif %}
+      {% if m.distribuicao == 'dias' %}<span class="sec-dias" title="Dias em que esta matéria entra na revisão">{{ dias_txt(m.dias_estudo) }}</span>{% endif %}
     </div>
     <a class="btn btn-fantasma btn-p sec-editar" href="{{ url_for('materias', editar=m.id) }}#materia-{{ m.id }}" data-alternar-edicao>Editar matéria</a>
     <a class="btn btn-p sec-concluir" href="{{ url_for('materias') }}#materia-{{ m.id }}" data-alternar-edicao>Concluir</a>
@@ -80,7 +149,7 @@
         </select>
       </label>
     </div>
-    {% if cfg.distribuicao == 'dias' %}
+    {% if m.distribuicao == 'dias' %}
     <div class="sec-campo">
       <span class="ed-rotulo">Quando estudo esta matéria</span>
       <div class="sec-freq">
@@ -100,6 +169,7 @@
     </div>
   </form>
 
+  {% if m.questoes %}
   <div class="sec-grade">
     {% for a in m.assuntos %}
     <article class="ac {{ 'e-grupo' if a.filhos }}" id="assunto-{{ a.id }}">
@@ -153,6 +223,33 @@
       </form>
     </details>
   </div>
+  {% endif %}
+
+  {% if m.flashcards %}
+  {# baralhos da matéria: cartões na grade (só flashcards) ou uma linha embaixo (questões + flashcards) #}
+  <div class="{{ 'sec-grade' if not m.questoes else 'sec-baralhos' }}">
+    {% if m.questoes and m.baralhos %}<span class="ed-rotulo">Flashcards</span>{% endif %}
+    {% for b in m.baralhos %}
+    {% if m.questoes %}
+    <a class="bar-chip" href="{{ url_for('baralho', bid=b.id) }}">{{ b.nome }} <small>{{ b.total }}</small></a>
+    {% else %}
+    <article class="ac ac-baralho">
+      <div class="ac-cab"><a class="ac-nome" href="{{ url_for('baralho', bid=b.id) }}">{{ b.nome }}</a>
+        <span class="mt-n">{{ b.total }} cart{{ 'ões' if b.total != 1 else 'ão' }}</span></div>
+      <p class="ac-vazio">{% if b.revisar or b.novos or b.aprendendo %}{{ b.revisar + b.novos + b.aprendendo }} para estudar hoje{% else %}em dia{% endif %}</p>
+    </article>
+    {% endif %}
+    {% endfor %}
+    <details class="{{ 'ac ac-novo' if not m.questoes else 'bar-novo' }}" {{ 'open' if not m.questoes and not m.baralhos }}>
+      <summary>+ Novo baralho</summary>
+      <form method="post" action="{{ url_for('criar_baralho') }}" class="ac-novo-form">
+        {{ csrf() }}<input type="hidden" name="materia_id" value="{{ m.id }}">
+        <input type="text" name="nome" placeholder="Ex.: Vocabulário, Gramática" required maxlength="120" aria-label="Nome do novo baralho em {{ m.nome }}">
+        <button class="btn btn-p">Criar</button>
+      </form>
+    </details>
+  </div>
+  {% endif %}
 
   {# edição: excluir a matéria inteira #}
   <form method="post" action="{{ url_for('excluir_materia', mid=m.id) }}" class="so-edicao sec-excluir"
@@ -171,17 +268,7 @@
   </div>
   <div class="cab-acoes">
   {% if materias %}<a class="btn btn-fantasma" href="{{ url_for('ordem') }}">Ordem</a>{% endif %}
-  <details class="nova-materia-d nova-secao-d" {{ 'open' if not secoes and not materias }}>
-    <summary class="btn">+ Nova seção</summary>
-    <form method="post" action="{{ url_for('criar_secao') }}" class="nova-materia-form nova-secao-form" data-meta-raiz>
-      {{ csrf() }}
-      <label>Nome da seção
-        <input type="text" name="nome" placeholder="Ex.: ENEM, SAT, Música" required maxlength="120" aria-label="Nome da nova seção"></label>
-      <span class="ed-rotulo">Tem prova?</span>
-      {{ campos.meta('meta', None) }}
-      <button class="btn btn-p">Criar seção</button>
-    </form>
-  </details>
+  <a class="btn" href="{{ url_for('nova_secao') }}">+ Nova seção</a>
   </div>
 </div>
 
@@ -190,45 +277,11 @@
   <h2>Comece pela primeira seção</h2>
   <p class="sub">Uma seção é o que você está estudando, como ENEM, SAT ou Música, com a data da prova se tiver.
     Dentro dela ficam as matérias (ex.: Matemática), e dentro de cada matéria, os assuntos.</p>
+  <a class="btn" href="{{ url_for('nova_secao') }}">Criar a primeira seção</a>
 </div>
 {% endif %}
 
-{% if cfg.distribuicao == 'ciclo' and materias %}
-{# Ciclo de estudos: a fila de matérias, na ordem em que se repete #}
-<section class="ciclo-painel" id="ciclo">
-  <div class="ciclo-cab">
-    <h2>Ciclo de estudos</h2>
-    <span class="sec-meta">{{ cfg.secoes_por_dia }} por dia · {{ ciclo | length }} na fila</span>
-  </div>
-  {% if ciclo %}
-  <ol class="ciclo-fila">
-    {% for it in ciclo %}
-    <li class="{{ 'vez' if it.id in vez_ids }}">
-      <span class="ciclo-pos">{{ loop.index }}</span>
-      <span class="ciclo-nome">{{ it.nome }}</span>
-      {% if it.id in vez_ids %}<span class="tag">hoje</span>{% endif %}
-      <span class="ciclo-acoes">
-        <form method="post" action="{{ url_for('ciclo_mover', iid=it.id, direcao='cima') }}">{{ csrf() }}<button class="ciclo-btn" title="Subir" aria-label="Subir {{ it.nome }}" {{ 'disabled' if loop.first }}>↑</button></form>
-        <form method="post" action="{{ url_for('ciclo_mover', iid=it.id, direcao='baixo') }}">{{ csrf() }}<button class="ciclo-btn" title="Descer" aria-label="Descer {{ it.nome }}" {{ 'disabled' if loop.last }}>↓</button></form>
-        <form method="post" action="{{ url_for('ciclo_remover', iid=it.id) }}">{{ csrf() }}<button class="ciclo-btn perigo" title="Tirar da fila" aria-label="Tirar {{ it.nome }} da fila">×</button></form>
-      </span>
-    </li>
-    {% endfor %}
-  </ol>
-  {% else %}
-  <p class="nada">A fila está vazia. Adicione as matérias na ordem em que quer estudar.</p>
-  {% endif %}
-  <form method="post" action="{{ url_for('ciclo_adicionar') }}" class="ciclo-add">
-    {{ csrf() }}
-    <select name="materia_id" required aria-label="Matéria para adicionar ao ciclo">
-      <option value="">Adicionar matéria à fila…</option>
-      {% for m in materias %}<option value="{{ m.id }}">{{ m.nome }}</option>{% endfor %}
-    </select>
-    <button class="btn btn-p">Adicionar</button>
-  </form>
-  <p class="mini">Uma matéria pode entrar mais de uma vez, para aparecer com mais frequência.</p>
-</section>
-{% endif %}
+{# o ciclo de estudos fica dentro de cada seção (painel_ciclo) #}
 
 {# ---------------- seções, cada uma com as suas matérias ---------------- #}
 {% for g in secoes %}
@@ -238,29 +291,17 @@
       <h2>{{ g.nome }}</h2>
       <span class="grupo-meta">{{ g.materias | length }} matéria{{ 's' if g.materias | length != 1 }}</span>
       {% if g.meta %}<span class="grupo-prova {{ 'passou' if g.faltam < 0 }}">{{ prova_txt(g) }}</span>
-      <a class="grupo-plano" href="{{ url_for('plano_secao', sid=g.id) }}">Plano de conteúdo →</a>
+      {% if g.usa_questoes %}<a class="grupo-plano" href="{{ url_for('plano_secao', sid=g.id) }}">Plano de conteúdo →</a>{% endif %}
       {% else %}<span class="grupo-meta">sem prova</span>{% endif %}
+      {% if g.dias_estudo %}<span class="grupo-prova" title="Dias de estudo da seção">{{ dias_txt(g.dias_estudo) }}</span>{% endif %}
+      {% if not g.usa_questoes %}<span class="grupo-meta">só flashcards</span>{% elif not g.usa_flashcards %}<span class="grupo-meta">só questões</span>{% endif %}
     </div>
-    <details class="grupo-editar">
-      <summary class="btn btn-p grupo-editar-btn">Editar seção</summary>
-      <div class="grupo-editar-painel">
-        <form method="post" action="{{ url_for('editar_secao', sid=g.id) }}" class="form">
-          {{ csrf() }}
-          <label>Nome da seção <input type="text" name="nome" value="{{ g.nome }}" required maxlength="120"></label>
-          <span class="ed-rotulo">Data da prova</span>
-          {{ campos.meta('meta', g.data_meta) }}
-          <label>Terminar conteúdo novo até <small class="mini">vazio = automático</small>
-            <input type="date" name="fim_conteudo" value="{{ g.fim_conteudo or '' }}"></label>
-          <button class="btn btn-p">Salvar seção</button>
-        </form>
-        <form method="post" action="{{ url_for('excluir_secao', sid=g.id) }}"
-              data-confirmar="Excluir a seção “{{ g.nome }}”? As matérias dela continuam, sem seção.">
-          {{ csrf() }}<button class="link-p perigo">Excluir a seção</button>
-        </form>
-      </div>
-    </details>
+    <a class="grupo-engrenagem" href="{{ url_for('secao_configurar', sid=g.id) }}" title="Configurações da seção {{ g.nome }}" aria-label="Configurações da seção {{ g.nome }}">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.4 7.4 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 2.6-1.5l2.4 1 2-3.4z"/></svg>
+    </a>
   </header>
 
+  {% if g.cfg.distribuicao == 'ciclo' and g.materias %}{{ painel_ciclo(g, g.materias, g.id) }}{% endif %}
   {% for m in g.materias %}{{ bloco_materia(m) }}{% endfor %}
   {% if not g.materias %}<p class="nada">Nenhuma matéria ainda. Ex.: no ENEM, Matemática, Biologia, História…</p>{% endif %}
   {{ nova_materia(g.id, g.nome) }}
@@ -276,8 +317,12 @@
       <h2>Sem seção</h2>
       <span class="grupo-meta">Para colocar numa seção, use “Editar matéria”.</span>
     </div>
+    <a class="grupo-engrenagem" href="{{ url_for('sem_secao_configurar') }}" title="Configurações das matérias sem seção" aria-label="Configurações das matérias sem seção">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4z"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.4 7.4 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 2.6-1.5l2.4 1 2-3.4z"/></svg>
+    </a>
   </header>
   {% endif %}
+  {% if solto.cfg.distribuicao == 'ciclo' and soltas %}{{ painel_ciclo(solto, soltas, 0) }}{% endif %}
   {% for m in soltas %}{{ bloco_materia(m) }}{% endfor %}
   {{ nova_materia(None, None) }}
 </section>

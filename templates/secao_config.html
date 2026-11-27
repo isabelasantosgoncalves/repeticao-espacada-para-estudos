@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% import "_config_campos.html" as campos %}
+{% import "_config_estudo.html" as est %}
+{% block titulo %}{{ 'Nova seção' if g.criando else g.nome ~ ' · configurações' }}{% endblock %}
+{% block main_class %}conteudo medio{% endblock %}
+
+{# Engrenagem da seção: tudo da seção num lugar (nome, tipo, dias, prova e as
+   configurações de estudo dela). Com g.id vazio, é a engrenagem do grupo "Sem seção". #}
+
+{% block conteudo %}
+<div class="cab-pagina">
+  <div>
+    <p class="selo"><a href="{{ url_for('materias') }}#secao-{{ g.id }}">Seções</a> · {{ 'nova seção' if g.criando else 'configurações' }}</p>
+    <h1>{{ 'Nova seção' if g.criando else g.nome }}</h1>
+  </div>
+  <a class="btn btn-fantasma" href="{{ url_for('materias') }}#secao-{{ g.id }}">Voltar</a>
+</div>
+
+<form method="post" class="painel form" id="form-config" data-frequencia {% if g.criando %}action="{{ url_for('criar_secao') }}"{% endif %}>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  {% if g.criando %}
+  <p class="sub">{% if g.primeira %}Uma seção é o que você está estudando (ex.: ENEM, SAT, Inglês). Responda como você estuda
+    nela; dá para mudar tudo depois na engrenagem da seção.{% else %}Já vem com as suas respostas padrão: mude só o que for diferente nesta seção.{% endif %}</p>
+  {% endif %}
+  {% if g.id or g.criando %}
+  <h2>Seção</h2>
+  <label>Nome <input type="text" name="nome" value="{{ g.nome }}" required maxlength="120" placeholder="Ex.: ENEM, SAT, Inglês" {{ 'autofocus' if g.criando }}></label>
+
+  <input type="hidden" name="tem_tipo" value="1">
+  <span class="ed-rotulo">O que você estuda nesta seção</span>
+  <div class="tipo-secao">
+    <label class="check"><input type="checkbox" name="usa_questoes" value="1" {{ 'checked' if g.usa_questoes }}> Questões</label>
+    <label class="check"><input type="checkbox" name="usa_flashcards" value="1" {{ 'checked' if g.usa_flashcards }}> Flashcards</label>
+  </div>
+
+  <div class="sec-campo">
+    <span class="ed-rotulo">Quando estudo esta seção</span>
+    <div class="sec-freq">
+      <label class="check"><input type="radio" name="frequencia" value="todo" {{ 'checked' if not g.dias_estudo }}> Todo dia</label>
+      <label class="check"><input type="radio" name="frequencia" value="dias" {{ 'checked' if g.dias_estudo }}> Só em alguns dias</label>
+    </div>
+    <div class="dias sec-dias-escolha" data-dias-secao>
+      {% for nome in NOMES_DIAS %}
+      <label class="dia"><input type="checkbox" name="dias_estudo" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 in g.dias_estudo }}><span>{{ nome[:3] }}</span></label>
+      {% endfor %}
+    </div>
+    <small>Nos outros dias, as matérias desta seção ficam fora da revisão, sem contar atraso.</small>
+  </div>
+
+  <div class="sec-campo" data-so-flashcards>
+    <span class="ed-rotulo">Revisar os flashcards</span>
+    <div class="sec-freq">
+      <label class="check"><input type="radio" name="flashcards_todo_dia" value="1" {{ 'checked' if g.cfg.get('flashcards_todo_dia', True) }}> Todo dia</label>
+      <label class="check"><input type="radio" name="flashcards_todo_dia" value="0" {{ 'checked' if not g.cfg.get('flashcards_todo_dia', True) }}> Só nos dias de estudo da seção</label>
+    </div>
+    <small>Ex.: estudar inglês 2 vezes por semana, mas revisar os cartões todo dia.</small>
+  </div>
+
+  <h2>Prova</h2>
+  {{ campos.meta('meta', g.data_meta) }}
+  <div data-so-questoes>
+  <label>Terminar conteúdo novo até <small class="mini">vazio = automático</small>
+    <input type="date" name="fim_conteudo" value="{{ g.fim_conteudo or '' }}" class="campo-data"></label>
+  </div>
+  {% else %}
+  <p class="sub">Valem para as matérias que não estão em nenhuma seção, e são o ponto de partida de cada seção nova.</p>
+  {% endif %}
+
+  {{ est.estudo(g.cfg) }}
+
+  {% if g.criando %}
+  <label class="check padrao-check"><input type="checkbox" name="salvar_padrao" value="1" {{ 'checked' if g.primeira }}>
+    Guardar estas respostas como padrão: as próximas seções já vêm preenchidas assim</label>
+  <div class="acoes"><button class="btn btn-g" type="submit">Criar seção</button></div>
+  {% else %}
+  <div class="acoes"><button class="btn btn-g" type="submit">Salvar</button></div>
+  {% endif %}
+</form>
+
+{% if g.id %}
+<section class="painel">
+  <h2>Excluir a seção</h2>
+  <p class="sub">As matérias continuam, sem seção, com os assuntos, as práticas e os flashcards.</p>
+  <form method="post" action="{{ url_for('excluir_secao', sid=g.id) }}"
+        data-confirmar="Excluir a seção “{{ g.nome }}”? As matérias dela continuam, sem seção.">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="link-p perigo">Excluir a seção</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script>
+  var f = document.getElementById('form-config');
+  Revisa.config(f); Revisa.teto(f, false); Revisa.sequencias(f); Revisa.metas(f); Revisa.tipoSecao(f);
+</script>{% endblock %}

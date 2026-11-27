@@ -15,7 +15,7 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 ## Funcionalidades
 
 - **Contas de usuário**: cadastro, login e logout, senhas com hash. Cada usuário só vê e edita os próprios dados (checado no backend em todas as rotas).
-- **Onboarding** no primeiro acesso, antes de entrar no app: ritmo de estudo, fase de aprendizado, máximo de dias sem revisão, se tem prova com data, como as matérias se distribuem na semana (todas todo dia, dias por matéria ou ciclo de estudos), modo de revisão, dia fixo, limite por matéria e questões por assunto.
+- **Criar uma seção** (o cadastro vai direto para a primeira): nome, questões e/ou flashcards, dias de estudo, se os flashcards são revisados todo dia, prova, ritmo de estudo, fase de aprendizado, máximo de dias sem revisão, como as matérias se distribuem (todas juntas, dias por matéria ou ciclo), modo de revisão, dia fixo, limite por matéria e questões por assunto. A caixinha **"Guardar estas respostas como padrão"** faz as próximas seções já virem preenchidas; aí é só mudar o que for diferente.
 - **Hoje (painel)**: números do dia (revisões feitas, atrasados, domínio médio e a contagem para cada prova), a lista de revisões com registro direto na linha (acertos + Enter), uma prévia de **amanhã**, as **próximas revisões** (a lista planejada de cada dia, com o limite por matéria) e o progresso nos assuntos ainda não começados.
 - **Registrar prática**: formulário rápido (matéria → assunto, data, acertos, total, observação).
 - **Mapa de domínio**: uma lista só, por matéria, com barra colorida (vermelho < 50%, amarelo 50–84%, verde ≥ 85%) e o status de cada assunto. Os contadores do topo (*Revisar agora*, *Pode esperar*, *Dominado*) servem de filtro.
@@ -23,16 +23,17 @@ Roda localmente (um clique no `iniciar.bat`) ou online no PythonAnywhere.
 - **Seções, matérias, assuntos e subassuntos**: a seção é o que você estuda (ex.: ENEM, SAT, Música); dentro dela ficam as matérias (Matemática, Biologia; SAT Math, SAT English), e dentro de cada matéria os assuntos, em cartões lado a lado, com os subassuntos dentro. Cada matéria tem seus **dias de estudo** (todo dia ou dias escolhidos) e um modo de edição próprio.
 - **Data da prova** (opcional, na seção; dia exato ou só o mês): vale para todas as matérias da seção. Nenhuma revisão passa da prova, e o painel mostra a contagem regressiva e quantos assuntos novos começar por semana para terminar o conteúdo a tempo.
 - **Flashcards**: baralhos dentro de cada matéria (ex.: Matemática → Fórmulas), cartões de frente e verso (com imagem, fórmula e opção de invertido; um a um ou vários de uma vez, colados de uma planilha) e uma tela de estudo no estilo do Anki: vira o cartão (espaço), responde **Errei**, **Acertei, mas demorei** ou **Acertei** (teclas 1 a 3), o que errou volta na mesma sessão, e dá para desfazer, editar, adiar e suspender. O painel Hoje mostra quantos cartões estudar, por matéria.
-- **Configurações**: tudo do onboarding, mais **exportar** e **importar** os dados em JSON.
+- **Engrenagem de cada seção**: tudo da seção num lugar só (nome, questões e/ou flashcards, dias de estudo, prova) e as **configurações de estudo dela**: ritmo, assuntos novos, máximo de dias, como as matérias se distribuem (todas juntas, dias por matéria ou ciclo), quando revisa (todo dia com limite, tudo que vencer, dia fixo ou os dois) e questões por assunto. Ex.: SAT todo dia com revisão grande no domingo; inglês só segunda e quinta. Numa seção só de flashcards aparecem só os campos que valem para os cartões. Seção nova começa com as respostas do cadastro; o grupo "Sem seção" tem a sua engrenagem.
+- **Configurações gerais** (engrenagem do topo): perfil (nome e foto) e os dados (exportar e importar em JSON).
 - **Instalável como app** (PWA): no Chrome/Edge aparece "Instalar Revisa" na barra de endereço; no celular, "Adicionar à tela inicial".
 - **Conta demo** com dados de exemplo (`demo@demo.com` / `demo123`).
 - Proteção CSRF em todos os formulários, validação de dados (acertos ≤ total, total > 0) e datas no formato dd/mm/aaaa.
 
 ## Telas
 
-| Landing | Onboarding |
+| Landing | Nova seção |
 |---|---|
-| ![Landing](docs/prints/landing.png) | ![Onboarding](docs/prints/onboarding.png) |
+| ![Landing](docs/prints/landing.png) | ![Nova seção](docs/prints/onboarding.png) |
 
 | Mapa de domínio | Histórico do assunto |
 |---|---|
@@ -125,8 +126,8 @@ Ex.: "Quero confirmar bem", máximo de 30 dias, acertando tudo:
 Uma prática pequena e ruim mexe pouco; várias seguidas vão descendo o intervalo aos poucos.
 
 **Fase de aprendizado.** Um assunto novo não vai direto para 30 dias, mesmo com 100% de acerto:
-nas primeiras práticas ele volta mais cedo, em degraus. O usuário escolhe a opção no onboarding e em
-Configurações. A sequência abaixo é para quando se acerta tudo, fazendo as questões sugeridas:
+nas primeiras práticas ele volta mais cedo, em degraus. O usuário escolhe a opção ao criar a seção e na engrenagem dela.
+A sequência abaixo é para quando se acerta tudo, fazendo as questões sugeridas:
 
 | Opção | Tetos | Acertando tudo |
 |---|---|---|
@@ -143,7 +144,7 @@ Em cada degrau, o resultado decide quanto do teto vale:
 | Médio (50 a 84%) | metade do teto, para cima | 2 dias |
 | Mal (< 50%) | 1 dia | 1 dia |
 
-**Ritmo de estudo.** Escolhido no onboarding e em Configurações, multiplica o intervalo final
+**Ritmo de estudo.** Escolhido em cada seção (ao criar e na engrenagem), multiplica o intervalo final
 (inclusive bônus e fase de aprendizado):
 
 | Ritmo | Para quem | Fator | Tabela |
@@ -156,7 +157,7 @@ Como tudo é calculado a partir do histórico, trocar o ritmo recalcula na hora 
 assuntos.
 
 **Máximo de dias sem revisão.** Por mais que o bônus cresça, nenhum assunto fica mais tempo sem
-revisão do que o teto escolhido pelo usuário. No onboarding o app sugere um valor pelas respostas
+revisão do que o teto escolhido pelo usuário. Ao criar a seção, o app sugere um valor pelas respostas
 (ritmo Leve 60, Moderado 45, Intenso 30; "esqueço rápido" −15, "já tenho base" +15), e a pessoa
 pode aceitar ou trocar (30, 45, 60, 90 ou qualquer número entre 7 e 365). A opção **Livre (até 1 ano)**
 é para quem estuda a longo prazo, sem prova marcada: a cada revisão bem-feita o intervalo dobra
@@ -215,7 +216,12 @@ e diz quantas estuda por dia. Cada dia, as **matérias da vez** são as próxima
 ### 8. Seções, matérias e subassuntos
 
 A hierarquia é **seção → matéria → assunto → subassunto** (ex.: ENEM → Matemática → Álgebra →
-Inequações). A seção é opcional: uma matéria pode ficar solta. Quando um assunto ganha
+Inequações). A seção é opcional: uma matéria pode ficar solta. Cada seção diz **o que se estuda nela**
+(caixinhas "Questões" e "Flashcards", uma ou as duas) e **quando**: todo dia ou só em alguns dias da
+semana. Uma seção só de flashcards (ex.: inglês) não tem assuntos, práticas, mapa nem plano; na tela
+Seções mostra os baralhos. Uma seção só de questões não aparece nos Flashcards. Os dias da seção valem
+para todas as matérias dela (nos outros dias ficam fora da revisão, sem contar atraso); quem escolhe
+"cada matéria tem seus dias" ainda pode dar dias próprios a uma matéria. Quando um assunto ganha
 subassuntos, ele vira um **grupo**: as práticas são registradas nos subassuntos, e só eles entram nas
 revisões e no mapa. O domínio do grupo é a **média simples** do domínio efetivo dos subassuntos já
 estudados. Cada um pesa igual, para que um ponto fraco (ex.: inequações) não fique escondido atrás
@@ -231,8 +237,7 @@ prática, flashcards e exportação.
 
 A data da prova fica na **seção** (ex.: ENEM em novembro de 2027) e vale para todas as matérias dela.
 É opcional: uma seção estudada a longo prazo (ex.: Música, inglês) fica sem prova e nada muda.
-O onboarding pergunta se há prova (e já cria a seção); depois ela se edita na tela Seções ou em
-**Configurações → Data da prova**. Se não souber o dia, dá para colocar **só o mês**: os cálculos usam o
+A prova se marca ao criar a seção e se muda na **engrenagem da seção**. Se não souber o dia, dá para colocar **só o mês**: os cálculos usam o
 dia 1º, para nenhuma revisão passar da prova, e o painel mostra a contagem como aproximada (~).
 
 - **Nenhuma revisão passa da prova.** O intervalo fica limitado à **metade dos dias que faltam**,

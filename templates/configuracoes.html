@@ -1,75 +1,37 @@
 {% extends "base.html" %}
-{% import "_config_campos.html" as campos %}
 {% block titulo %}Configurações{% endblock %}
 {% block main_class %}conteudo medio{% endblock %}
+
+{# Configurações gerais da conta: perfil e dados. O jeito de estudar (dias, prova,
+   ritmo, dia fixo...) fica na engrenagem de cada seção. #}
+
 {% block conteudo %}
 <div class="cab-pagina"><div><p class="selo">Sua conta</p><h1>Configurações</h1></div></div>
 
-<form method="post" class="painel form" id="form-config">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-  <h2>Ritmo de estudo</h2>
-  <p class="sub">O Leve usa os intervalos da tabela (3, 4, 7, 15 e 30 dias, do assunto mais fraco ao dominado).
-    O Moderado usa 75% deles e o Intenso, metade: por isso o dominado volta em 30, 22 ou 15 dias.
-    Ao trocar, as datas de todos os assuntos são recalculadas.</p>
-  {{ campos.ritmo(cfg) }}
-
-  <h2>Assuntos novos</h2>
-  <p class="sub">Nas primeiras práticas o assunto volta mais cedo, para fixar. A sequência de cada opção vale quando você acerta tudo.
-    Resultado médio (50 a 84%) volta na metade do tempo; abaixo de 50%, no dia seguinte.</p>
-  {{ campos.aprendizado(cfg) }}
-
-  <h2 id="prova">Data da prova</h2>
-  <p class="sub">A prova fica na seção (ex.: ENEM) e vale para todas as matérias dela. Nenhuma revisão passa da prova,
-    e o painel mostra a contagem regressiva. Com só o mês, o app conta a partir do dia 1º.</p>
-  {% if secoes %}
-  <div class="meta-secoes">
-    {% for g in secoes %}
-    <div class="meta-secao">
-      <b>{{ g.nome }}</b>
-      {{ campos.meta('meta_' ~ g.id, g.data_meta) }}
+<section class="painel perfil">
+  <h2>Perfil</h2>
+  <form method="post" action="{{ url_for('salvar_perfil') }}" class="form perfil-form" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="perfil-foto">
+      {% if current_user.foto_id %}<img src="{{ url_for('foto_perfil') }}" alt="Sua foto">{% else %}<span>{{ current_user.primeiro_nome[:1] | upper }}</span>{% endif %}
     </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <p class="mini meta-vazio">Crie uma seção (ex.: ENEM) em <a href="{{ url_for('materias') }}">Seções</a> para marcar a data da prova.</p>
-  {% endif %}
+    <div class="perfil-campos">
+      <label>Nome <input type="text" name="nome" value="{{ current_user.nome }}" required maxlength="120"></label>
+      <label class="fc-arquivo">Foto <small class="mini">PNG, JPG, GIF ou WebP, até 2 MB</small>
+        <input type="file" name="foto" accept="image/png,image/jpeg,image/gif,image/webp" data-imagem></label>
+      {% if current_user.foto_id %}<label class="check"><input type="checkbox" name="remover_foto" value="1"> Remover a foto</label>{% endif %}
+      <p class="mini">E-mail: {{ current_user.email }}</p>
+      <div><button class="btn btn-p">Salvar perfil</button></div>
+    </div>
+  </form>
+</section>
 
-  <h2>Máximo de dias sem revisão</h2>
-  <p class="sub">Mesmo dominado, nenhum assunto fica mais tempo que isso sem revisão.
-    <b>Livre</b> deixa o intervalo dobrar até 1 ano, para quem estuda a longo prazo, sem prova marcada.</p>
-  {{ campos.teto(cfg) }}
-
-  <h2>Matérias na semana</h2>
-  <p class="sub">Quais matérias entram na revisão de cada dia.</p>
-  {{ campos.distribuicao(cfg) }}
-
-  <div data-secao="secoes_dia">
-    <h2>Matérias por dia no ciclo</h2>
-    <p class="sub">Quantas matérias da fila você estuda por dia.</p>
-    {{ campos.secoes_por_dia(cfg) }}
-  </div>
-
-  <h2>Quando você revisa</h2>
-  {{ campos.modo(cfg) }}
-
-  <div data-secao="dias">
-    <h2>Dia fixo</h2>
-    <p class="sub">Nesse dia entra tudo que venceu e o que vence até o próximo dia fixo.</p>
-    {{ campos.dias(cfg) }}
-  </div>
-
-  <div data-secao="minima">
-    <h2>Limite por matéria</h2>
-    <p class="sub">Máximo de assuntos de cada matéria na revisão do dia. Entram primeiro os que mais precisam.</p>
-    {{ campos.minima(cfg) }}
-  </div>
-
-  <h2>Questões por assunto</h2>
-  {{ campos.questoes(cfg) }}
-
-  <div class="acoes"><button class="btn btn-g" type="submit">Salvar configurações</button></div>
-</form>
+<section class="painel">
+  <h2>Como você estuda</h2>
+  <p class="sub">Ritmo, dias, dia fixo, limite e o resto ficam em cada seção: na tela Seções, clique na
+    <b>engrenagem</b> da seção.</p>
+  {% if secoes %}<p class="padrao-lista">{% for g in secoes %}<a class="bar-chip" href="{{ url_for('secao_configurar', sid=g.id) }}">⚙ {{ g.nome }}</a>{% endfor %}</p>{% endif %}
+</section>
 
 <section class="painel">
   <h2>Seus dados</h2>
@@ -86,4 +48,4 @@
   </form>
 </section>
 {% endblock %}
-{% block scripts %}<script>Revisa.config(document.getElementById('form-config')); Revisa.teto(document.getElementById('form-config'), false); Revisa.sequencias(document.getElementById('form-config')); Revisa.metas(document.getElementById('form-config'));</script>{% endblock %}
+

@@ -49,12 +49,14 @@ def cartoes_com_agenda(db, uid: int, dia: date, baralho_id: int | None = None,
     `proxima` (None = novo), `intervalo`, `inicio`, `ultima`, `aprendendo`
     (errou hoje e ainda não acertou) e `estudado_hoje`.
     """
-    cfg = S.carregar_config(db, uid)
+    cfgs = S.configs_por_secao(db, uid)
+    grupo = S.secao_por_materia(db, uid)
     metas = S.metas_por_materia(db, uid)
     respostas = _respostas(db, uid)
-    sql = """SELECT c.*, b.nome AS baralho, b.materia_id, m.nome AS materia
+    sql = """SELECT c.*, b.nome AS baralho, b.materia_id, m.nome AS materia, s.dias_estudo AS dias_secao
              FROM cartoes c JOIN baralhos b ON b.id = c.baralho_id JOIN materias m ON m.id = b.materia_id
-             WHERE c.usuario_id = ?"""
+             LEFT JOIN secoes s ON s.id = m.secao_id
+             WHERE c.usuario_id = ? AND COALESCE(s.usa_flashcards, 1) = 1"""
     params: list = [uid]
     if baralho_id:
         sql += " AND c.baralho_id = ?"
@@ -67,9 +69,11 @@ def cartoes_com_agenda(db, uid: int, dia: date, baralho_id: int | None = None,
         c = dict(r)
         for lado in ((0, 1) if c["invertido"] else (0,)):
             resp = respostas.get((c["id"], lado), [])
+            cfg = cfgs.get(grupo.get(c["materia_id"]), cfgs[None])
+            dias_fc = "" if cfg.get("flashcards_todo_dia", True) else c["dias_secao"]
             agenda = L.agenda_cartao([(d, n) for d, n, _ in resp], S.fator(cfg), S.tetos(cfg),
                                      cfg.get("teto_dias"), metas.get(c["materia_id"]))
-            item = dict(c, lado=lado, chave=f"{c['id']}-{lado}")
+            item = dict(c, lado=lado, chave=f"{c['id']}-{lado}", dias_secao=dias_fc)
             item["pergunta"], item["resposta"] = (c["frente"], c["verso"]) if lado == 0 else (c["verso"], c["frente"])
             item["img_pergunta"], item["img_resposta"] = ((c["imagem_frente"], c["imagem_verso"]) if lado == 0
                                                           else (c["imagem_verso"], c["imagem_frente"]))
@@ -85,7 +89,10 @@ def cartoes_com_agenda(db, uid: int, dia: date, baralho_id: int | None = None,
 
 def _classificar(itens: list[dict], dia: date, novos_ja: int) -> dict[str, list[dict]]:
     """Separa os lados em revisar, novos (com o limite diário) e aprendendo."""
-    hoje_ativos = [c for c in itens if not c["suspenso"] and c["adiado"] != dia.isoformat()]
+    # fora: suspensos, adiados hoje e, se a seção revisa flashcards só nos dias de estudo,
+    # os dela num dia sem estudo (esperam o dia, sem atraso)
+    hoje_ativos = [c for c in itens if not c["suspenso"] and c["adiado"] != dia.isoformat()
+                   and L.estuda_no_dia(dia, S.ler_dias(c.get("dias_secao")))]
     # lado irmão já estudado hoje: o outro lado espera até amanhã
     estudados = {c["id"] for c in hoje_ativos if c["estudado_hoje"]}
     aprendendo = sorted([c for c in hoje_ativos if c["aprendendo"]], key=lambda c: c["ordem_resposta"])
@@ -121,10 +128,12 @@ def listar_baralhos(db, uid: int, dia: date) -> list[dict]:
     materias = sorted((dict(m) for m in db.execute(
         """SELECT m.id, m.nome, s.nome AS secao, COALESCE(s.ordem, s.id) AS pos_secao,
                   COALESCE(m.ordem, m.id) AS pos FROM materias m LEFT JOIN secoes s ON s.id = m.secao_id
-           WHERE m.usuario_id = ?""", (uid,))),
+           WHERE m.usuario_id = ? AND COALESCE(s.usa_flashcards, 1) = 1""", (uid,))),
         key=lambda m: (m["pos_secao"] is None, m["pos_secao"] or 0, m["pos"], m["id"]))
     por_materia = {m["id"]: [] for m in materias}
     for b in db.execute("SELECT id, materia_id, nome FROM baralhos WHERE usuario_id = ?", (uid,)):
+        if b["materia_id"] not in por_materia:
+            continue
         lados = por_baralho.get(b["id"], [])
         g = _classificar(lados, dia, novos_ja)
         por_materia[b["materia_id"]].append(dict(
@@ -137,7 +146,9 @@ def listar_baralhos(db, uid: int, dia: date) -> list[dict]:
 
 def resumo_hoje(db, uid: int, dia: date) -> dict | None:
     """Painel: quantos cartões estudar hoje, por matéria. None se não há baralhos."""
-    if not db.execute("SELECT 1 FROM baralhos WHERE usuario_id = ? LIMIT 1", (uid,)).fetchone():
+    if not db.execute("""SELECT 1 FROM baralhos b JOIN materias m ON m.id = b.materia_id
+                         LEFT JOIN secoes s ON s.id = m.secao_id
+                         WHERE b.usuario_id = ? AND COALESCE(s.usa_flashcards, 1) = 1 LIMIT 1""", (uid,)).fetchone():
         return None
     f = fila(db, uid, dia)
     por_materia: dict[int, dict] = {}
@@ -205,8 +216,9 @@ def apagar_imagens_soltas(db, uid: int):
     """Imagens que nenhum cartão usa mais."""
     db.execute("""DELETE FROM imagens WHERE usuario_id = ? AND id NOT IN (
                     SELECT imagem_frente FROM cartoes WHERE usuario_id = ? AND imagem_frente IS NOT NULL
-                    UNION SELECT imagem_verso FROM cartoes WHERE usuario_id = ? AND imagem_verso IS NOT NULL)""",
-               (uid, uid, uid))
+                    UNION SELECT imagem_verso FROM cartoes WHERE usuario_id = ? AND imagem_verso IS NOT NULL
+                    UNION SELECT foto_id FROM usuarios WHERE id = ? AND foto_id IS NOT NULL)""",
+               (uid, uid, uid, uid))
 
 
 def imagem_em_data_uri(db, uid: int, iid: int | None) -> str | None:

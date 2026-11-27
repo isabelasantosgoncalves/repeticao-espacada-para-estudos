@@ -42,6 +42,7 @@ class Usuario(UserMixin):
         self.nome = row["nome"]
         self.email = row["email"]
         self.onboarding_ok = bool(row["onboarding_ok"])
+        self.foto_id = row["foto_id"] if "foto_id" in row.keys() else None
 
     @property
     def primeiro_nome(self):
@@ -213,7 +214,9 @@ def materias_com_assuntos(uid: int) -> list[dict]:
     """
     db = banco.get_db()
     materias = sorted((dict(m) for m in db.execute(
-        "SELECT id, nome, dias_estudo, secao_id, ordem FROM materias WHERE usuario_id = ?", (uid,))), key=S.posicao)
+        """SELECT m.id, m.nome, m.dias_estudo, m.secao_id, m.ordem,
+                  COALESCE(s.usa_questoes, 1) AS questoes, COALESCE(s.usa_flashcards, 1) AS flashcards
+           FROM materias m LEFT JOIN secoes s ON s.id = m.secao_id WHERE m.usuario_id = ?""", (uid,))), key=S.posicao)
     for m in materias:
         m["dias_estudo"] = S.ler_dias(m["dias_estudo"])
     por_materia: dict[int, list] = {m["id"]: [] for m in materias}
@@ -262,11 +265,7 @@ def registrar_rotas(app: Flask):
             enviado = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
             if not enviado or not secrets.compare_digest(enviado, session.get("csrf", "")):
                 abort(400, "A página expirou. Recarregue e tente de novo.")
-        # Onboarding obrigatório no primeiro acesso
-        livres = {"onboarding", "sair", "static", "landing", "demo", "manifest", "service_worker", "offline"}
-        if (current_user.is_authenticated and not current_user.onboarding_ok
-                and request.endpoint not in livres):
-            return redirect(url_for("onboarding"))
+
 
     @app.context_processor
     def contexto():
@@ -336,12 +335,13 @@ def registrar_rotas(app: Flask):
                 flash(erro, "erro")
                 return render_template("auth/cadastro.html", nome=nome, email=email)
             cur = db.execute(
-                "INSERT INTO usuarios (nome, email, senha_hash) VALUES (?, ?, ?)",
+                "INSERT INTO usuarios (nome, email, senha_hash, onboarding_ok) VALUES (?, ?, ?, 1)",
                 (nome[:100], email[:200], generate_password_hash(senha)))
             db.execute("INSERT INTO configuracoes (usuario_id) VALUES (?)", (cur.lastrowid,))
             db.commit()
             login_user(carregar_usuario(cur.lastrowid))
-            return redirect(url_for("onboarding"))
+            flash("Conta criada! Comece pela sua primeira seção (ex.: ENEM, SAT, Inglês).", "ok")
+            return redirect(url_for("nova_secao"))
         return render_template("auth/cadastro.html")
 
     @app.route("/entrar", methods=["GET", "POST"])
@@ -381,28 +381,8 @@ def registrar_rotas(app: Flask):
     @app.route("/onboarding", methods=["GET", "POST"])
     @login_required
     def onboarding():
-        db = banco.get_db()
-        cfg = S.carregar_config(db, current_user.id)
-        if request.method == "POST":
-            dados = dict(request.form)
-            dados["dias_fixos"] = request.form.getlist("dias_fixos")
-            try:
-                S.salvar_config(db, current_user.id, dados, commit=False)
-                # Prova com data: já cria a seção (ex.: ENEM) com a data
-                meta = S.ler_campo_meta(request.form, "meta")
-                if meta:
-                    nome = nome_valido(request.form.get("prova_nome"), "da prova", 120)
-                    db.execute("INSERT INTO secoes (usuario_id, nome, data_meta) VALUES (?, ?, ?)",
-                               (current_user.id, nome, meta))
-            except ValueError as e:
-                db.rollback()
-                flash(str(e) if "invalid literal" not in str(e) else "Confira os números informados.", "erro")
-                return render_template("onboarding.html", cfg=cfg)
-            db.execute("UPDATE usuarios SET onboarding_ok = 1 WHERE id = ?", (current_user.id,))
-            db.commit()
-            flash("Tudo pronto! Agora cadastre suas matérias e os assuntos de cada uma.", "ok")
-            return redirect(url_for("materias"))
-        return render_template("onboarding.html", cfg=cfg)
+        """As perguntas de estudo agora ficam na criação de cada seção."""
+        return redirect(url_for("nova_secao"))
 
     # ------------------------------------------------------------------- hoje
 
@@ -472,7 +452,7 @@ def registrar_rotas(app: Flask):
     def form_sessao(sessao=None):
         """GET/POST compartilhado entre nova sessão e edição."""
         db = banco.get_db()
-        materias = materias_com_assuntos(current_user.id)
+        materias = [m for m in materias_com_assuntos(current_user.id) if m["questoes"]]   # seção só de flashcards fica de fora
         valores = {
             "assunto_id": request.args.get("assunto", type=int),
             "data": S.hoje().isoformat(), "acertos": "", "total": "", "observacao": "",
@@ -838,9 +818,25 @@ def registrar_rotas(app: Flask):
             sec["materias"] = [m for m in todas if m["secao_id"] == sec["id"]]
             sec["faltam"] = (sec["meta"] - hoje_d).days if sec["meta"] else None
         soltas = [m for m in todas if not m["secao_id"]]
+        # configuração e ciclo de cada grupo (seção, ou "sem seção")
+        cfgs = S.configs_por_secao(banco.get_db(), current_user.id, cfg_m)
+        ciclo = S.ler_ciclo(banco.get_db(), current_user.id)
+        vez_ids = []
+        for c in cfgs.values():
+            if S.usa_ciclo(c):
+                vez_ids += [it["id"] for it in S.vez_do_ciclo(banco.get_db(), current_user.id, S.hoje(), c)]
+        for sec in secoes:
+            sec["cfg"] = cfgs[sec["id"]]
+            sec["ciclo"] = [it for it in ciclo if it["secao_id"] == sec["id"]]
+        grupo_solto = {"cfg": cfgs[None], "ciclo": [it for it in ciclo if it["secao_id"] is None]}
+        for m in todas:
+            m["distribuicao"] = cfgs.get(m["secao_id"], cfg_m)["distribuicao"]
+        # baralhos de cada matéria (seções com flashcards)
+        baralhos = {m["id"]: m["baralhos"] for m in C.listar_baralhos(banco.get_db(), current_user.id, hoje_d)}
+        for m in todas:
+            m["baralhos"] = baralhos.get(m["id"], [])
         return render_template("materias.html", materias=todas, secoes=secoes, soltas=soltas,
-                               cfg=cfg_m, ciclo=S.ler_ciclo(banco.get_db(), current_user.id),
-                               vez_ids=[it["id"] for it in S.vez_do_ciclo(banco.get_db(), current_user.id, S.hoje(), cfg_m)],
+                               cfg=cfg_m, solto=grupo_solto, vez_ids=vez_ids,
                                editando=request.args.get("editar", type=int))
 
     def executar(acao, ok_msg, mid=None):
@@ -892,18 +888,48 @@ def registrar_rotas(app: Flask):
             return {"ok": False}, 400
         return {"ok": True}
 
+    @app.route("/secoes/nova", methods=["GET"])
+    @login_required
+    def nova_secao():
+        """Criar seção: todas as perguntas, já preenchidas com o padrão (respostas guardadas antes)."""
+        db = banco.get_db()
+        primeira = not db.execute("SELECT 1 FROM secoes WHERE usuario_id = ? LIMIT 1", (current_user.id,)).fetchone()
+        g = {"id": None, "nome": "", "criando": True, "primeira": primeira, "usa_questoes": 1, "usa_flashcards": 1,
+             "dias_estudo": [], "data_meta": None, "fim_conteudo": None, "cfg": S.carregar_config(db, current_user.id)}
+        return render_template("secao_config.html", g=g)
+
     @app.route("/secoes/nova", methods=["POST"])
     @login_required
     def criar_secao():
+        db = banco.get_db()
+        padrao = S.carregar_config(db, current_user.id)
+        completo = "ritmo" in request.form    # veio da página com todas as perguntas
         try:
             nome = nome_valido(request.form.get("nome"), "da seção", 120)
             meta = S.ler_campo_meta(request.form, "meta")
+            questoes, flashcards = S.ler_tipo_secao(request.form) if "tem_tipo" in request.form else (1, 1)
+            dias = S.ler_dias_secao(request.form) if "frequencia" in request.form else ""
+            fim = S.ler_fim_conteudo(request.form) if "fim_conteudo" in request.form else None
+            dados = padrao
+            if completo:
+                dados = dados_de_estudo()
+                if not questoes:   # só flashcards: os campos de questões nem aparecem
+                    dados.update({k: padrao[k] for k in S.CAMPOS_ESTUDO if dados.get(k) in (None, "") and k in padrao})
+                    dados["dias_fixos"] = dados["dias_fixos"] or padrao["dias_fixos"]
+                S.validar_config(dados)
         except ValueError as e:
-            flash(str(e), "erro")
-            return redirect(url_for("materias"))
-        sid = banco.get_db().execute("INSERT INTO secoes (usuario_id, nome, data_meta) VALUES (?, ?, ?)",
-                                     (current_user.id, nome, meta)).lastrowid
-        banco.get_db().commit()
+            flash(str(e) if "invalid literal" not in str(e) else "Confira os números informados.", "erro")
+            return redirect(url_for("nova_secao") if completo else url_for("materias"))
+        sid = db.execute(
+            """INSERT INTO secoes (usuario_id, nome, data_meta, fim_conteudo, dias_estudo, usa_questoes, usa_flashcards)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (current_user.id, nome, meta, fim, dias, questoes, flashcards)).lastrowid
+        # cada seção tem as suas configurações
+        S.salvar_config_secao(db, current_user.id, sid, dados)
+        # "guardar como padrão": as próximas seções já vêm com estas respostas
+        if completo and request.form.get("salvar_padrao"):
+            S.salvar_config(db, current_user.id, dados, commit=False)
+        db.commit()
         flash("Seção criada. Agora adicione as matérias dela.", "ok")
         return redirect(url_for("materias") + f"#secao-{sid}")
 
@@ -916,9 +942,15 @@ def registrar_rotas(app: Flask):
             nome = nome_valido(request.form.get("nome"), "da seção", 120) if "nome" in request.form else atual["nome"]
             meta = S.ler_campo_meta(request.form, "meta") if "meta_tipo" in request.form else atual["data_meta"]
             fim = S.ler_fim_conteudo(request.form) if "fim_conteudo" in request.form else atual["fim_conteudo"]
+            if "tem_tipo" in request.form:
+                questoes, flashcards = S.ler_tipo_secao(request.form)
+            else:
+                questoes, flashcards = atual["usa_questoes"], atual["usa_flashcards"]
+            dias = S.ler_dias_secao(request.form) if "frequencia" in request.form else atual["dias_estudo"]
             banco.get_db().execute(
-                "UPDATE secoes SET nome = ?, data_meta = ?, fim_conteudo = ? WHERE id = ? AND usuario_id = ?",
-                (nome, meta, fim, sid, current_user.id))
+                """UPDATE secoes SET nome = ?, data_meta = ?, fim_conteudo = ?, usa_questoes = ?, usa_flashcards = ?,
+                          dias_estudo = ? WHERE id = ? AND usuario_id = ?""",
+                (nome, meta, fim, questoes, flashcards, dias, sid, current_user.id))
             banco.get_db().commit()
             flash("Seção atualizada.", "ok")
         except ValueError as e:
@@ -926,6 +958,93 @@ def registrar_rotas(app: Flask):
         if request.form.get("voltar") == "plano":
             return redirect(url_for("plano_secao", sid=sid))
         return redirect(url_for("materias") + f"#secao-{sid}")
+
+    def dados_de_estudo():
+        dados = {k: request.form.get(k) for k in S.CAMPOS_ESTUDO}
+        dados["dias_fixos"] = request.form.getlist("dias_fixos")
+        return dados
+
+    @app.route("/secoes/<int:sid>/configurar", methods=["GET", "POST"])
+    @login_required
+    def secao_configurar(sid):
+        """Engrenagem da seção: nome, tipo, dias, prova e as configurações de estudo dela."""
+        atual = do_usuario("secoes", sid)
+        db = banco.get_db()
+        if request.method == "POST":
+            try:
+                nome = nome_valido(request.form.get("nome"), "da seção", 120)
+                questoes, flashcards = S.ler_tipo_secao(request.form)
+                dias = S.ler_dias_secao(request.form)
+                meta = S.ler_campo_meta(request.form, "meta")
+                fim = S.ler_fim_conteudo(request.form) if "fim_conteudo" in request.form else atual["fim_conteudo"]
+                cfg_atual = S.configs_por_secao(db, current_user.id)[sid]
+                dados = dados_de_estudo()
+                if not questoes:   # seção só de flashcards: os campos de questões nem aparecem
+                    dados.update({k: cfg_atual[k] for k in S.CAMPOS_ESTUDO if not dados.get(k) and k != "dias_fixos"})
+                    dados["dias_fixos"] = dados["dias_fixos"] or cfg_atual["dias_fixos"]
+                db.execute("""UPDATE secoes SET nome = ?, usa_questoes = ?, usa_flashcards = ?, dias_estudo = ?,
+                                     data_meta = ?, fim_conteudo = ? WHERE id = ? AND usuario_id = ?""",
+                           (nome, questoes, flashcards, dias, meta, fim, sid, current_user.id))
+                S.salvar_config_secao(db, current_user.id, sid, dados)
+                db.commit()
+                flash("Seção salva.", "ok")
+                return redirect(url_for("materias") + f"#secao-{sid}")
+            except ValueError as e:
+                db.rollback()
+                flash(str(e) if "invalid literal" not in str(e) else "Confira os números informados.", "erro")
+                return redirect(url_for("secao_configurar", sid=sid))
+        g = [x for x in S.listar_secoes(db, current_user.id) if x["id"] == sid][0]
+        g["cfg"] = S.configs_por_secao(db, current_user.id)[sid]
+        return render_template("secao_config.html", g=g)
+
+    @app.route("/sem-secao/configurar", methods=["GET", "POST"])
+    @login_required
+    def sem_secao_configurar():
+        """Engrenagem do grupo "Sem seção": configurações da conta (também o ponto de partida das seções novas)."""
+        db = banco.get_db()
+        if request.method == "POST":
+            try:
+                S.salvar_config(db, current_user.id, dados_de_estudo())
+                flash("Configurações salvas.", "ok")
+                return redirect(url_for("materias") + "#sem-secao")
+            except ValueError as e:
+                flash(str(e) if "invalid literal" not in str(e) else "Confira os números informados.", "erro")
+                return redirect(url_for("sem_secao_configurar"))
+        g = {"id": None, "nome": "Sem seção", "cfg": S.carregar_config(db, current_user.id)}
+        return render_template("secao_config.html", g=g)
+
+    @app.route("/conta/perfil", methods=["POST"])
+    @login_required
+    def salvar_perfil():
+        """Nome e foto de perfil."""
+        db = banco.get_db()
+        try:
+            nome = nome_valido(request.form.get("nome"), "", 120)
+            foto = current_user.foto_id
+            arq = request.files.get("foto")
+            if arq and arq.filename:
+                foto = C.guardar_imagem(db, current_user.id, arq.read())
+            elif request.form.get("remover_foto"):
+                foto = None
+            antiga = current_user.foto_id
+            db.execute("UPDATE usuarios SET nome = ?, foto_id = ? WHERE id = ?", (nome, foto, current_user.id))
+            if antiga and antiga != foto:
+                db.execute("DELETE FROM imagens WHERE id = ? AND usuario_id = ?", (antiga, current_user.id))
+            db.commit()
+            flash("Perfil salvo.", "ok")
+        except ValueError as e:
+            db.rollback()
+            flash(str(e), "erro")
+        return redirect(url_for("configuracoes"))
+
+    @app.route("/conta/foto")
+    @login_required
+    def foto_perfil():
+        r = banco.get_db().execute("SELECT tipo, dados FROM imagens WHERE id = ? AND usuario_id = ?",
+                                   (current_user.foto_id, current_user.id)).fetchone()
+        if r is None:
+            abort(404)
+        return Response(r["dados"], mimetype=r["tipo"], headers={"Cache-Control": "private, max-age=300"})
 
     @app.route("/secoes/<int:sid>/plano")
     @login_required
@@ -1045,8 +1164,14 @@ def registrar_rotas(app: Flask):
 
     # ---------------------------------------------------------- ciclo de estudos
 
-    def voltar_ciclo():
-        return redirect(url_for("materias") + "#ciclo")
+    def voltar_ciclo(materia_id=None):
+        sid = S.secao_por_materia(banco.get_db(), current_user.id).get(materia_id) if materia_id else None
+        return redirect(url_for("materias") + f"#ciclo-{sid or 0}")
+
+    def itens_do_grupo(db, materia_id):
+        """Itens do ciclo da mesma seção da matéria (cada seção tem a sua fila)."""
+        sid = S.secao_por_materia(db, current_user.id).get(materia_id)
+        return [it["id"] for it in S.ler_ciclo(db, current_user.id) if it["secao_id"] == sid]
 
     def renumerar_ciclo(db):
         ids = [r["id"] for r in db.execute(
@@ -1065,40 +1190,46 @@ def registrar_rotas(app: Flask):
         db = banco.get_db()
         fim = db.execute("SELECT COALESCE(MAX(posicao), -1) + 1 FROM ciclo_itens WHERE usuario_id = ?",
                          (current_user.id,)).fetchone()[0]
-        # entra na rodada atual mais baixa, para não furar nem ficar para trás na fila
-        rodada = db.execute("SELECT COALESCE(MIN(rodada), 0) FROM ciclo_itens WHERE usuario_id = ?",
-                            (current_user.id,)).fetchone()[0]
+        # entra na rodada atual mais baixa da fila desta seção, para não furar nem ficar para trás
+        do_grupo = itens_do_grupo(db, mid)
+        rodada = 0
+        if do_grupo:
+            rodada = db.execute(f"SELECT MIN(rodada) FROM ciclo_itens WHERE id IN ({','.join('?' * len(do_grupo))})",
+                                do_grupo).fetchone()[0]
         db.execute("INSERT INTO ciclo_itens (usuario_id, materia_id, posicao, rodada) VALUES (?, ?, ?, ?)",
                    (current_user.id, mid, fim, rodada))
         db.commit()
-        return voltar_ciclo()
+        return voltar_ciclo(mid)
 
     @app.route("/ciclo/<int:iid>/mover/<direcao>", methods=["POST"])
     @login_required
     def ciclo_mover(iid, direcao):
-        do_usuario("ciclo_itens", iid)
+        item = do_usuario("ciclo_itens", iid)
         db = banco.get_db()
         renumerar_ciclo(db)
-        ids = [r["id"] for r in db.execute(
+        # troca de lugar só dentro da fila da mesma seção
+        todos = [r["id"] for r in db.execute(
             "SELECT id FROM ciclo_itens WHERE usuario_id = ? ORDER BY posicao", (current_user.id,))]
-        i = ids.index(iid)
+        grupo = [x for x in todos if x in set(itens_do_grupo(db, item["materia_id"]))]
+        i = grupo.index(iid)
         j = i - 1 if direcao == "cima" else i + 1
-        if 0 <= j < len(ids):
-            ids[i], ids[j] = ids[j], ids[i]
-            for pos, x in enumerate(ids):
+        if 0 <= j < len(grupo):
+            a, b = todos.index(grupo[i]), todos.index(grupo[j])
+            todos[a], todos[b] = todos[b], todos[a]
+            for pos, x in enumerate(todos):
                 db.execute("UPDATE ciclo_itens SET posicao = ? WHERE id = ?", (pos, x))
         db.commit()
-        return voltar_ciclo()
+        return voltar_ciclo(item["materia_id"])
 
     @app.route("/ciclo/<int:iid>/remover", methods=["POST"])
     @login_required
     def ciclo_remover(iid):
-        do_usuario("ciclo_itens", iid)
+        item = do_usuario("ciclo_itens", iid)
         db = banco.get_db()
         db.execute("DELETE FROM ciclo_itens WHERE id = ? AND usuario_id = ?", (iid, current_user.id))
         renumerar_ciclo(db)
         db.commit()
-        return voltar_ciclo()
+        return voltar_ciclo(item["materia_id"])
 
     @app.route("/ciclo/<int:iid>/pular", methods=["POST"])
     @login_required
@@ -1133,8 +1264,7 @@ def registrar_rotas(app: Flask):
                 db.rollback()
                 flash(str(e) if "invalid literal" not in str(e) else "Confira os números informados.", "erro")
             return redirect(url_for("configuracoes"))
-        return render_template("configuracoes.html", cfg=S.carregar_config(db, current_user.id),
-                               secoes=S.listar_secoes(db, current_user.id))
+        return render_template("configuracoes.html", secoes=S.listar_secoes(db, current_user.id))
 
     @app.route("/configuracoes/exportar")
     @login_required

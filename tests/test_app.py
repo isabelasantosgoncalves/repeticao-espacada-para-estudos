@@ -35,9 +35,11 @@ class TestApp(unittest.TestCase):
     def criar_usuario(self, email):
         tok = self.token("/cadastro")
         self.c.post("/cadastro", data={"nome": "Teste", "email": email, "senha": "segredo1", "csrf_token": tok})
-        self.c.post("/onboarding", data={
-            "csrf_token": self.token("/onboarding"), "modo": "ambos", "dias_fixos": ["6"],
-            "revisao_minima": "2", "questoes_modo": "auto", "questoes_fixas": "10"})
+        # configurações padrão (as das matérias sem seção e o ponto de partida das seções novas)
+        self.c.post("/sem-secao/configurar", data={
+            "csrf_token": self.token("/sem-secao/configurar"), "ritmo": "leve", "aprendizado": "padrao",
+            "modo": "ambos", "dias_fixos": ["6"], "revisao_minima": "2", "questoes_modo": "auto",
+            "questoes_fixas": "10"})
 
     def sair(self):
         self.c.post("/sair", data={"csrf_token": self.token("/hoje")})
@@ -54,12 +56,15 @@ class TestApp(unittest.TestCase):
         r = self.c.post("/entrar", data={"email": "a@a.com", "senha": "x"})
         self.assertEqual(r.status_code, 400)
 
-    def test_onboarding_obrigatorio(self):
+    def test_cadastro_vai_para_a_primeira_secao(self):
         tok = self.token("/cadastro")
-        self.c.post("/cadastro", data={"nome": "N", "email": "n@n.com", "senha": "segredo1", "csrf_token": tok})
-        r = self.c.get("/hoje")
-        self.assertEqual(r.status_code, 302)
-        self.assertIn("/onboarding", r.headers["Location"])
+        r = self.c.post("/cadastro", data={"nome": "N", "email": "n@n.com", "senha": "segredo1", "csrf_token": tok})
+        self.assertIn("/secoes/nova", r.headers["Location"])
+        html = self.c.get("/secoes/nova").get_data(as_text=True)
+        self.assertIn("Nova seção", html)
+        self.assertIn('name="salvar_padrao" value="1" checked', html)   # primeira seção: guardar como padrão
+        self.assertEqual(self.c.get("/hoje").status_code, 200)            # nada de perguntas obrigatórias
+        self.assertIn("/secoes/nova", self.c.get("/onboarding").headers["Location"])
 
     def test_isolamento_entre_usuarios(self):
         self.criar_usuario("a@a.com")
@@ -408,7 +413,9 @@ class TestApp(unittest.TestCase):
         self.post("/configuracoes", dict(base, meta_1_tipo="dia", meta_1_dia=f"{hoje.year + 1}-11-07",
                                          meta_2_tipo="sem"), "/configuracoes")
         dados = self.c.get("/configuracoes/exportar").get_json()
-        self.assertEqual(dados["secoes"], [{"nome": "ENEM", "data_meta": f"{hoje.year + 1}-11-07"}, {"nome": "Música"}])
+        sem_config = [{k: v for k, v in x.items() if k != "config"} for x in dados["secoes"]]
+        self.assertEqual(sem_config, [{"nome": "ENEM", "data_meta": f"{hoje.year + 1}-11-07"}, {"nome": "Música"}])
+        self.assertIn("modo", dados["secoes"][0]["config"])      # cada seção leva as suas configurações
         self.assertEqual(dados["materias"][0]["secao"], "ENEM")
         # importar recria as seções e liga as matérias
         import io, json
@@ -418,17 +425,30 @@ class TestApp(unittest.TestCase):
         self.assertEqual(de_novo["secoes"], dados["secoes"])
         self.assertEqual([m.get("secao") for m in de_novo["materias"]], ["ENEM", "Música"])
 
-    def test_onboarding_pergunta_a_prova(self):
+    def test_nova_secao_com_todas_as_perguntas(self):
         tok = self.token("/cadastro")
         self.c.post("/cadastro", data={"nome": "N", "email": "ob@ob.com", "senha": "segredo1", "csrf_token": tok})
-        html = self.c.get("/onboarding").get_data(as_text=True)
-        self.assertIn("prova com data", html)
-        self.c.post("/onboarding", data={
-            "csrf_token": self.token("/onboarding"), "modo": "completa", "revisao_minima": "2",
-            "questoes_modo": "auto", "questoes_fixas": "10", "meta_tipo": "mes", "meta_mes": "2027-11",
-            "prova_nome": "ENEM"})
-        self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["secoes"],
+        campos = {"nome": "ENEM", "tem_tipo": "1", "usa_questoes": "1", "usa_flashcards": "1", "frequencia": "todo",
+                  "flashcards_todo_dia": "1", "meta_tipo": "mes", "meta_mes": "2027-11", "ritmo": "leve",
+                  "aprendizado": "padrao", "teto_dias": "45", "distribuicao": "todas", "secoes_por_dia": "2",
+                  "modo": "completa", "revisao_minima": "2", "questoes_modo": "auto", "questoes_fixas": "10"}
+        self.post("/secoes/nova", dict(campos, salvar_padrao="1"), "/secoes/nova")
+        dados = self.c.get("/configuracoes/exportar").get_json()
+        self.assertEqual([{k: v for k, v in x.items() if k != "config"} for x in dados["secoes"]],
                          [{"nome": "ENEM", "data_meta": "2027-11"}])
+        self.assertEqual(dados["secoes"][0]["config"]["modo"], "completa")
+        self.assertEqual(dados["configuracoes"]["modo"], "completa")        # virou o padrão
+        # a próxima seção já vem preenchida com o padrão, e a caixinha não vem marcada
+        html = self.c.get("/secoes/nova").get_data(as_text=True)
+        self.assertIn('value="completa" checked', html)
+        self.assertNotIn('name="salvar_padrao" value="1" checked', html)
+        # sem "guardar como padrão": a seção muda, o padrão não
+        self.post("/secoes/nova", dict(campos, nome="Inglês", modo="diaria", meta_tipo="sem",
+                                       usa_questoes="", flashcards_todo_dia="0"), "/secoes/nova")
+        dados = self.c.get("/configuracoes/exportar").get_json()
+        self.assertEqual(dados["configuracoes"]["modo"], "completa")
+        self.assertEqual(dados["secoes"][1]["config"]["modo"], "diaria")
+        self.assertFalse(dados["secoes"][1]["config"]["flashcards_todo_dia"])
 
     def test_flashcards(self):
         self.criar_usuario("fc@fc.com")
@@ -643,6 +663,116 @@ class TestApp(unittest.TestCase):
         self.criar_usuario("outro@o.com")
         self.assertEqual(salvar("assunto", [3, 1, 2]).status_code, 400)
 
+    def test_secao_dias_e_tipo(self):
+        from datetime import timedelta
+        hoje = S.hoje()
+        self.criar_usuario("tipo@t.com")
+        # seção de questões estudada só num dia que não é hoje
+        self.post("/secoes/nova", {"nome": "SAT", "tem_tipo": "1", "usa_questoes": "1", "usa_flashcards": "1"}, "/materias")
+        self.post("/materias/nova", {"nome": "Math", "secao_id": "1"}, "/materias")
+        self.post("/assuntos/novo", {"nome": "Ratios", "materia_id": "1"}, "/materias")
+        self.post("/sessoes/nova", {"assunto_id": "1", "data": (hoje - timedelta(days=10)).isoformat(),
+                                    "acertos": "2", "total": "10"}, "/sessoes/nova")
+        self.assertIn("Ratios", self.c.get("/hoje").get_data(as_text=True).split('<aside class="lateral">')[0])
+        outro = str((hoje.weekday() + 1) % 7)
+        self.post("/secoes/1/editar", {"nome": "SAT", "frequencia": "dias", "dias_estudo": outro}, "/materias")
+        html = self.c.get("/hoje").get_data(as_text=True).split('<aside class="lateral">')[0]
+        self.assertNotIn("Ratios", html)               # vale mesmo com "todas as matérias todo dia"
+        self.assertIn("fora hoje: Math", html)
+        # "só em alguns dias" sem dia marcado é recusado; nenhuma caixinha marcada também
+        self.post("/secoes/1/editar", {"nome": "SAT", "frequencia": "dias"}, "/materias")
+        self.post("/secoes/1/editar", {"nome": "SAT", "tem_tipo": "1"}, "/materias")
+        sec = self.c.get("/configuracoes/exportar").get_json()["secoes"][0]
+        self.assertEqual(sec["dias_estudo"], [int(outro)])
+        self.assertNotIn("questoes", sec)
+        # seção só de flashcards: sem assuntos/práticas; os baralhos aparecem na tela Seções
+        self.post("/secoes/nova", {"nome": "Inglês", "tem_tipo": "1", "usa_flashcards": "1"}, "/materias")
+        self.post("/materias/nova", {"nome": "Vocabulário", "secao_id": "2"}, "/materias")
+        self.post("/assuntos/novo", {"nome": "Phrasal verbs", "materia_id": "2"}, "/materias")
+        self.post("/flashcards/baralhos/novo", {"nome": "Phrasal verbs", "materia_id": "2"}, "/materias")
+        self.post("/flashcards/baralhos/1/cartoes", {"frente": "give up", "verso": "desistir"}, "/flashcards")
+        pagina = self.c.get("/materias").get_data(as_text=True)
+        self.assertIn("só flashcards", pagina)
+        self.assertIn("1 baralho", pagina)
+        self.assertNotIn("Vocabulário", self.c.get("/sessoes/nova").get_data(as_text=True))   # não registra prática
+        self.assertIn("Phrasal verbs", self.c.get("/flashcards").get_data(as_text=True))
+        self.assertIn("1 para estudar hoje", self.c.get("/hoje").get_data(as_text=True))
+        # seção estudada só em outro dia: por padrão os flashcards são revisados todo dia...
+        outro_dia = str((hoje.weekday() + 2) % 7)
+        cfg_ingles = {"nome": "Inglês", "tem_tipo": "1", "usa_flashcards": "1", "frequencia": "dias",
+                      "dias_estudo": outro_dia, "meta_tipo": "sem", "ritmo": "leve", "aprendizado": "padrao",
+                      "teto_dias": "45"}
+        self.post("/secoes/2/configurar", cfg_ingles, "/materias")
+        self.assertIn("give up", self.c.get("/flashcards/estudar").get_data(as_text=True))
+        # ...ou só nos dias de estudo da seção: hoje não aparecem
+        self.post("/secoes/2/configurar", dict(cfg_ingles, flashcards_todo_dia="0"), "/materias")
+        self.assertIn("Tudo em dia", self.c.get("/flashcards/estudar").get_data(as_text=True))
+        self.post("/secoes/2/configurar", {"nome": "Inglês", "tem_tipo": "1", "usa_flashcards": "1",
+                                           "frequencia": "todo", "meta_tipo": "sem",
+                                           "ritmo": "leve", "aprendizado": "padrao", "teto_dias": "45"}, "/materias")
+        # seção só de questões: some dos flashcards
+        self.post("/secoes/2/editar", {"nome": "Inglês", "tem_tipo": "1", "usa_questoes": "1"}, "/materias")
+        self.assertNotIn("Phrasal verbs", self.c.get("/flashcards").get_data(as_text=True).split("<main")[1])
+        # exportar/importar levam dias e tipo
+        import io, json
+        dados = self.c.get("/configuracoes/exportar").get_json()
+        self.post("/configuracoes/importar", {"arquivo": (io.BytesIO(json.dumps(dados).encode()), "b.json"),
+                                              "confirmar": "1"}, "/configuracoes")
+        self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["secoes"], dados["secoes"])
+
+    def test_configuracao_por_secao(self):
+        from datetime import timedelta
+        hoje = S.hoje()
+        self.criar_usuario("cfg@c.com")       # padrão do cadastro: modo "ambos", dia fixo domingo, limite 2
+        self.post("/secoes/nova", {"nome": "SAT"}, "/materias")
+        self.post("/secoes/nova", {"nome": "Inglês"}, "/materias")
+        self.post("/materias/nova", {"nome": "Math", "secao_id": "1"}, "/materias")
+        self.post("/materias/nova", {"nome": "Grammar", "secao_id": "2"}, "/materias")
+        for i, (nome, mid) in enumerate((("A1", "1"), ("A2", "1"), ("A3", "1"), ("G1", "2"), ("G2", "2"), ("G3", "2")), 1):
+            self.post("/assuntos/novo", {"nome": nome, "materia_id": mid}, "/materias")
+            self.post("/sessoes/nova", {"assunto_id": str(i), "data": (hoje - timedelta(days=10)).isoformat(),
+                                        "acertos": "2", "total": "10"}, "/sessoes/nova")
+        base = {"ritmo": "leve", "aprendizado": "padrao", "teto_dias": "45", "distribuicao": "todas",
+                "secoes_por_dia": "2", "revisao_minima": "1", "questoes_modo": "auto", "questoes_fixas": "10",
+                "tem_tipo": "1", "usa_questoes": "1", "usa_flashcards": "1", "frequencia": "todo", "meta_tipo": "sem"}
+        # SAT: todo dia, limite 1 por matéria; Inglês: tudo que vencer
+        self.post("/secoes/1/configurar", dict(base, nome="SAT", modo="diaria"), "/secoes/1/configurar")
+        self.post("/secoes/2/configurar", dict(base, nome="Inglês", modo="completa"), "/secoes/2/configurar")
+        html = self.c.get("/hoje").get_data(as_text=True).split('<aside class="lateral">')[0]
+        self.assertEqual(sum(1 for n in ("A1", "A2", "A3") if f">{n}</a>" in html), 1)    # limite do SAT
+        self.assertEqual(sum(1 for n in ("G1", "G2", "G3") if f">{n}</a>" in html), 3)    # Inglês: tudo
+        self.assertIn("SAT:", html)
+        self.assertIn("Inglês:", html)
+        # a engrenagem mostra a configuração da seção; a geral não tem mais os campos de estudo
+        self.assertIn('value="completa" checked', self.c.get("/secoes/2/configurar").get_data(as_text=True))
+        self.assertNotIn('name="modo"', self.c.get("/configuracoes").get_data(as_text=True))
+        # ritmo só do Inglês: intenso encurta só os intervalos dele
+        self.post("/secoes/2/configurar", dict(base, nome="Inglês", modo="completa", ritmo="intenso"), "/secoes/2/configurar")
+        import db as banco
+        with self.app.app_context():
+            est = S.estados(banco.get_db(), 1, hoje, S.carregar_config(banco.get_db(), 1))
+        self.assertEqual(est[1].intervalo, 1)     # SAT, leve: assunto mal na fase de aprendizado = 1 dia
+        self.assertEqual(est[4].intervalo, 1)
+        # engrenagem do "Sem seção" muda a configuração da conta
+        r = self.post("/sem-secao/configurar", dict(base, modo="fixa", dias_fixos="5"), "/sem-secao/configurar")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["configuracoes"]["modo"], "fixa")
+        # outra pessoa não abre a engrenagem
+        self.sair()
+        self.criar_usuario("outra@c.com")
+        self.assertEqual(self.c.get("/secoes/1/configurar").status_code, 404)
+
+    def test_perfil_com_foto(self):
+        import io
+        self.criar_usuario("foto@f.com")
+        png = b"\x89PNG\r\n\x1a\n" + b"0" * 40
+        self.post("/conta/perfil", {"nome": "Isa Teste", "foto": (io.BytesIO(png), "eu.png")}, "/configuracoes")
+        html = self.c.get("/configuracoes").get_data(as_text=True)
+        self.assertIn('value="Isa Teste"', html)
+        self.assertEqual(self.c.get("/conta/foto").data, png)
+        self.post("/conta/perfil", {"nome": "Isa Teste", "remover_foto": "1"}, "/configuracoes")
+        self.assertEqual(self.c.get("/conta/foto").status_code, 404)
+
     def test_pwa(self):
         r = self.c.get("/manifest.webmanifest")
         self.assertEqual(r.status_code, 200)
@@ -652,26 +782,20 @@ class TestApp(unittest.TestCase):
         self.assertIn("javascript", r.headers["Content-Type"])
         self.assertEqual(self.c.get("/offline").status_code, 200)
 
-    def test_onboarding_salva_ritmo_e_fase(self):
-        tok = self.token("/cadastro")
-        self.c.post("/cadastro", data={"nome": "N", "email": "r@r.com", "senha": "segredo1", "csrf_token": tok})
-        self.c.post("/onboarding", data={
-            "csrf_token": self.token("/onboarding"), "ritmo": "intenso", "aprendizado": "degraus",
-            "modo": "diaria", "revisao_minima": "3", "questoes_modo": "auto", "questoes_fixas": "10"})
+    def test_configuracao_valida_ritmo_e_teto(self):
+        self.criar_usuario("r@r.com")
+        base = {"ritmo": "intenso", "aprendizado": "degraus", "modo": "diaria", "revisao_minima": "3",
+                "questoes_modo": "auto", "questoes_fixas": "10"}
+        self.post("/sem-secao/configurar", base, "/sem-secao/configurar")
         cfg = self.c.get("/configuracoes/exportar").get_json()["configuracoes"]
         self.assertEqual((cfg["ritmo"], cfg["aprendizado"]), ("intenso", "degraus"))
         self.assertEqual(cfg["teto_dias"], 30)          # sem resposta: usa a sugestão
-        self.assertNotIn("(ritmo leve)", self.c.get("/configuracoes").get_data(as_text=True))
+        self.assertNotIn("(ritmo leve)", self.c.get("/sem-secao/configurar").get_data(as_text=True))
         # teto fora do intervalo permitido é recusado
-        self.c.post("/configuracoes", data={
-            "csrf_token": self.token("/configuracoes"), "ritmo": "intenso", "aprendizado": "degraus",
-            "teto_dias": "500", "modo": "diaria", "revisao_minima": "3", "questoes_modo": "auto",
-            "questoes_fixas": "10"})
+        self.post("/sem-secao/configurar", dict(base, teto_dias="500"), "/sem-secao/configurar")
         self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["configuracoes"]["teto_dias"], 30)
         # valor inválido não é aceito
-        self.c.post("/configuracoes", data={
-            "csrf_token": self.token("/configuracoes"), "ritmo": "turbo", "aprendizado": "degraus",
-            "modo": "diaria", "revisao_minima": "3", "questoes_modo": "auto", "questoes_fixas": "10"})
+        self.post("/sem-secao/configurar", dict(base, ritmo="turbo"), "/sem-secao/configurar")
         self.assertEqual(self.c.get("/configuracoes/exportar").get_json()["configuracoes"]["ritmo"], "intenso")
 
 

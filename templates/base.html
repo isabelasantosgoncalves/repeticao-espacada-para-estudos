@@ -42,7 +42,7 @@
           </a>
           {% endif %}
           <details class="conta">
-            <summary class="conta-btn" title="Sua conta" aria-label="Sua conta">{{ current_user.primeiro_nome[:1] | upper }}</summary>
+            <summary class="conta-btn" title="Sua conta" aria-label="Sua conta">{% if current_user.foto_id %}<img src="{{ url_for('foto_perfil') }}" alt="">{% else %}{{ current_user.primeiro_nome[:1] | upper }}{% endif %}</summary>
             <div class="conta-menu">
               <p class="conta-nome">{{ current_user.nome }}</p>
               <form method="post" action="{{ url_for('sair') }}">

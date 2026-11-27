@@ -1,0 +1,52 @@
+{# Configurações de estudo de uma seção (engrenagem da seção; a do grupo "Sem seção"
+   vale para as matérias sem seção e é o ponto de partida das seções novas).
+   Os blocos com data-secao aparecem conforme o modo (Revisa.config); os com
+   data-so-questoes somem numa seção só de flashcards (Revisa.tipoSecao). #}
+{% import "_config_campos.html" as campos %}
+{% macro estudo(cfg) %}
+<h2>Ritmo de estudo</h2>
+<p class="sub">O Leve usa os intervalos da tabela (3, 4, 7, 15 e 30 dias, do assunto mais fraco ao dominado).
+  O Moderado usa 75% deles e o Intenso, metade. Ao trocar, as datas são recalculadas.</p>
+{{ campos.ritmo(cfg) }}
+
+<h2>Assuntos novos</h2>
+<p class="sub">Nas primeiras práticas o assunto volta mais cedo, para fixar. Resultado médio (50 a 84%) volta na metade do tempo;
+  abaixo de 50%, no dia seguinte.</p>
+{{ campos.aprendizado(cfg) }}
+
+<h2>Máximo de dias sem revisão</h2>
+<p class="sub">Mesmo dominado, nenhum assunto fica mais tempo que isso sem revisão.
+  <b>Livre</b> deixa o intervalo dobrar até 1 ano, para quem estuda a longo prazo, sem prova marcada.</p>
+{{ campos.teto(cfg) }}
+
+<div data-so-questoes>
+<h2>Matérias na semana</h2>
+<p class="sub">Quais matérias entram na revisão de cada dia.</p>
+{{ campos.distribuicao(cfg) }}
+
+<div data-secao="secoes_dia">
+  <h2>Matérias por dia no ciclo</h2>
+  <p class="sub">Quantas matérias da fila você estuda por dia.</p>
+  {{ campos.secoes_por_dia(cfg) }}
+</div>
+
+<h2>Quando você revisa</h2>
+<p class="sub">"Dia de estudo" são os dias marcados em "Quando estudo esta seção".</p>
+{{ campos.modo(cfg) }}
+
+<div data-secao="dias">
+  <h2>Dia fixo</h2>
+  <p class="sub">Nesse dia entra tudo que venceu e o que vence até o próximo dia fixo.</p>
+  {{ campos.dias(cfg) }}
+</div>
+
+<div data-secao="minima">
+  <h2>Limite por matéria</h2>
+  <p class="sub">Máximo de assuntos de cada matéria na revisão do dia. Entram primeiro os que mais precisam.</p>
+  {{ campos.minima(cfg) }}
+</div>
+
+<h2>Questões por assunto</h2>
+{{ campos.questoes(cfg) }}
+</div>
+{% endmacro %}

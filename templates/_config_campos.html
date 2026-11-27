@@ -1,4 +1,4 @@
-{# Campos de configuração usados no onboarding e na tela Configurações #}
+{# Campos de configuração usados na criação e na engrenagem de cada seção #}
 {% macro ritmo(cfg) %}
 <div class="opcoes">
   {% for valor, titulo, desc, forte, fraco in [
@@ -52,8 +52,8 @@
 {% macro distribuicao(cfg) %}
 <div class="opcoes">
   {% for valor, titulo, desc in [
-      ('todas', 'Estudo todas as matérias todo dia', 'Ex.: SAT Math e SAT English, todos os dias.'),
-      ('dias', 'Cada matéria tem seus dias', 'Ex.: ENEM, com Biologia seg/qua e Química ter/qui. Você marca os dias de cada matéria na tela Seções.'),
+      ('todas', 'Todas as matérias juntas', 'Todas entram na revisão em todo dia de estudo. Ex.: SAT Math e SAT English.'),
+      ('dias', 'Cada matéria tem seus dias', 'Ex.: ENEM, com Biologia seg/qua e Química ter/qui. Os dias de cada matéria ficam em “Editar matéria”.'),
       ('ciclo', 'Ciclo de estudos', 'Uma fila de matérias que se repete. Cada dia você estuda as próximas da fila; se não estudar num dia, a fila espera. Você monta a fila na tela Seções.')] %}
   <label class="opcao">
     <input type="radio" name="distribuicao" value="{{ valor }}" {{ 'checked' if cfg.distribuicao == valor }} required>
@@ -73,9 +73,9 @@
 {% macro modo(cfg) %}
 <div class="opcoes" data-grupo="modo">
   {% for valor, titulo, desc in [
-      ('diaria', 'Todo dia, o que vencer (com limite)', 'Revisa os assuntos que venceram, até o limite por matéria. O que passar fica para os dias seguintes.'),
-      ('completa', 'Todo dia, tudo que vencer', 'Sem limite. Bom para a fase só de questões.'),
-      ('fixa', 'Só no dia fixo', 'Uma revisão grande por semana, com tudo que venceu.'),
+      ('diaria', 'Todo dia de estudo, com limite', 'O que venceu, até o limite por matéria. O que passar fica para o próximo dia.'),
+      ('completa', 'Todo dia de estudo, tudo que vencer', 'Sem limite. Bom para a fase só de questões.'),
+      ('fixa', 'Só no dia fixo', 'Uma revisão grande, com tudo que venceu e o que vence até o próximo dia fixo.'),
       ('ambos', 'Dia fixo + limite nos outros dias', 'Revisão grande no dia fixo; nos outros dias, o que vencer até o limite por matéria.')] %}
   <label class="opcao">
     <input type="radio" name="modo" value="{{ valor }}" {{ 'checked' if cfg.modo == valor }} required>
